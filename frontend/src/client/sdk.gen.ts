@@ -326,6 +326,39 @@ export class UsersService {
     }
     
     /**
+     * Upload Avatar
+     * Upload user avatar.
+     * @param data The data for the request.
+     * @param data.file
+     * @returns UserPublic Successful Response
+     * @throws ApiError
+     */
+    public static uploadAvatarMe(data: UsersUploadAvatarMeData): CancelablePromise<UsersUploadAvatarMeResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/users/me/avatar',
+            formData: data.file,
+            mediaType: 'multipart/form-data',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Delete Avatar
+     * Delete user avatar.
+     * @returns UserPublic Successful Response
+     * @throws ApiError
+     */
+    public static deleteAvatarMe(): CancelablePromise<UsersDeleteAvatarMeResponse> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/v1/users/me/avatar'
+        });
+    }
+    
+    /**
      * Update Password Me
      * Update own password.
      * @param data The data for the request.

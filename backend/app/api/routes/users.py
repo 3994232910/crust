@@ -1,7 +1,8 @@
 import uuid
 from typing import Any
+from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlmodel import col, delete, func, select
 
 from app import crud
@@ -96,6 +97,81 @@ def update_user_me(
     session.add(current_user)
     session.commit()
     session.refresh(current_user)
+    return current_user
+
+
+@router.post("/me/avatar", response_model=UserPublic)
+async def upload_avatar(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    file: UploadFile = File(...),
+) -> Any:
+    """
+    Upload user avatar.
+    """
+    # Validate file type
+    allowed_types = ["image/jpeg", "image/png", "image/gif", "image/webp"]
+    if file.content_type not in allowed_types:
+        raise HTTPException(
+            status_code=400,
+            detail=f"File type not allowed. Allowed types: {', '.join(allowed_types)}"
+        )
+    
+    # Validate file size (max 5MB)
+    contents = await file.read()
+    if len(contents) > 5 * 1024 * 1024:
+        raise HTTPException(
+            status_code=400,
+            detail="File size exceeds 5MB limit"
+        )
+    
+    # Create avatars directory if it doesn't exist
+    avatars_dir = Path("avatars")
+    avatars_dir.mkdir(exist_ok=True)
+    
+    # Generate unique filename
+    file_extension = file.filename.split(".")[-1] if "." in file.filename else "jpg"
+    filename = f"{current_user.id}.{file_extension}"
+    file_path = avatars_dir / filename
+    
+    # Save file
+    with open(file_path, "wb") as f:
+        f.write(contents)
+    
+    # Update user avatar URL
+    avatar_url = f"/avatars/{filename}"
+    current_user.avatar_url = avatar_url
+    session.add(current_user)
+    session.commit()
+    session.refresh(current_user)
+    
+    return current_user
+
+
+@router.delete("/me/avatar", response_model=UserPublic)
+def delete_avatar(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+) -> Any:
+    """
+    Delete user avatar.
+    """
+    if current_user.avatar_url:
+        # Remove file if it exists
+        try:
+            file_path = Path(current_user.avatar_url.lstrip("/"))
+            if file_path.exists():
+                file_path.unlink()
+        except Exception:
+            pass  # Ignore errors when deleting file
+        
+        current_user.avatar_url = None
+        session.add(current_user)
+        session.commit()
+        session.refresh(current_user)
+    
     return current_user
 
 
