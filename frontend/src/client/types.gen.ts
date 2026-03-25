@@ -77,6 +77,7 @@ export type UserPublic = {
     full_name?: (string | null);
     id: string;
     created_at?: (string | null);
+    avatar_url?: (string | null);
 };
 
 export type UserRegister = {
@@ -101,6 +102,7 @@ export type UserUpdate = {
 export type UserUpdateMe = {
     full_name?: (string | null);
     email?: (string | null);
+    avatar_url?: (string | null);
 };
 
 export type ValidationError = {
@@ -199,6 +201,16 @@ export type UsersUpdateUserMeData = {
 };
 
 export type UsersUpdateUserMeResponse = (UserPublic);
+
+export type UsersUploadAvatarMeData = {
+    file: File;
+};
+
+export type UsersUploadAvatarMeResponse = (UserPublic);
+
+export type UsersDeleteAvatarMeData = Record<string, never>;
+
+export type UsersDeleteAvatarMeResponse = (UserPublic);
 
 export type UsersUpdatePasswordMeData = {
     requestBody: UpdatePassword;

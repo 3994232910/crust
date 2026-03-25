@@ -1,7 +1,9 @@
 import sentry_sdk
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
-from starlette.middleware.cors import CORSMiddleware
+from fastapi.middleware.cors import CORSMiddleware
+from starlette.staticfiles import StaticFiles
+from pathlib import Path
 
 from app.api.main import api_router
 from app.core.config import settings
@@ -20,6 +22,19 @@ app = FastAPI(
     generate_unique_id_function=custom_generate_unique_id,
 )
 
+'''
+def create_app() -> FastAPI:
+    app = FastAPI(
+        title=settings.PROJECT_NAME,
+        openapi_url=f"{settings.API_V1_STR}/openapi.json",
+    )
+'''
+    
+# Mount static files for avatars
+avatars_dir = Path("avatars")
+avatars_dir.mkdir(exist_ok=True)
+app.mount("/avatars", StaticFiles(directory=avatars_dir), name="avatars")
+
 # Set all CORS enabled origins
 if settings.all_cors_origins:
     app.add_middleware(
@@ -29,5 +44,4 @@ if settings.all_cors_origins:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-
 app.include_router(api_router, prefix=settings.API_V1_STR)
