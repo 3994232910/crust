@@ -3,7 +3,118 @@
 import type { CancelablePromise } from './core/CancelablePromise';
 import { OpenAPI } from './core/OpenAPI';
 import { request as __request } from './core/request';
-import type { ItemsReadItemsData, ItemsReadItemsResponse, ItemsCreateItemData, ItemsCreateItemResponse, ItemsReadItemData, ItemsReadItemResponse, ItemsUpdateItemData, ItemsUpdateItemResponse, ItemsDeleteItemData, ItemsDeleteItemResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, PrivateCreateUserData, PrivateCreateUserResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse } from './types.gen';
+import type { ForgeReadForgesData, ForgeReadForgesResponse, ForgeCreateForgeData, ForgeCreateForgeResponse, ForgeReadForgeData, ForgeReadForgeResponse, ForgeUpdateForgeData, ForgeUpdateForgeResponse, ForgeDeleteForgeData, ForgeDeleteForgeResponse, ItemsReadItemsData, ItemsReadItemsResponse, ItemsCreateItemData, ItemsCreateItemResponse, ItemsReadItemData, ItemsReadItemResponse, ItemsUpdateItemData, ItemsUpdateItemResponse, ItemsDeleteItemData, ItemsDeleteItemResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, PrivateCreateUserData, PrivateCreateUserResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersUploadAvatarData, UsersUploadAvatarResponse, UsersDeleteAvatarResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse } from './types.gen';
+
+export class ForgeService {
+    /**
+     * Read Forges
+     * Retrieve forges.
+     * @param data The data for the request.
+     * @param data.skip
+     * @param data.limit
+     * @returns ForgesPublic Successful Response
+     * @throws ApiError
+     */
+    public static readForges(data: ForgeReadForgesData = {}): CancelablePromise<ForgeReadForgesResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/forge/',
+            query: {
+                skip: data.skip,
+                limit: data.limit
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Create Forge
+     * Create new forge.
+     * @param data The data for the request.
+     * @param data.requestBody
+     * @returns ForgePublic Successful Response
+     * @throws ApiError
+     */
+    public static createForge(data: ForgeCreateForgeData): CancelablePromise<ForgeCreateForgeResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/forge/',
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Read Forge
+     * Get forge by ID.
+     * @param data The data for the request.
+     * @param data.id
+     * @returns ForgePublic Successful Response
+     * @throws ApiError
+     */
+    public static readForge(data: ForgeReadForgeData): CancelablePromise<ForgeReadForgeResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/forge/{id}',
+            path: {
+                id: data.id
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Update Forge
+     * Update forge.
+     * @param data The data for the request.
+     * @param data.id
+     * @param data.requestBody
+     * @returns ForgePublic Successful Response
+     * @throws ApiError
+     */
+    public static updateForge(data: ForgeUpdateForgeData): CancelablePromise<ForgeUpdateForgeResponse> {
+        return __request(OpenAPI, {
+            method: 'PUT',
+            url: '/api/v1/forge/{id}',
+            path: {
+                id: data.id
+            },
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Delete Forge
+     * Delete forge.
+     * @param data The data for the request.
+     * @param data.id
+     * @returns Message Successful Response
+     * @throws ApiError
+     */
+    public static deleteForge(data: ForgeDeleteForgeData): CancelablePromise<ForgeDeleteForgeResponse> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/v1/forge/{id}',
+            path: {
+                id: data.id
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+}
 
 export class ItemsService {
     /**
@@ -329,15 +440,15 @@ export class UsersService {
      * Upload Avatar
      * Upload user avatar.
      * @param data The data for the request.
-     * @param data.file
+     * @param data.formData
      * @returns UserPublic Successful Response
      * @throws ApiError
      */
-    public static uploadAvatarMe(data: UsersUploadAvatarMeData): CancelablePromise<UsersUploadAvatarMeResponse> {
+    public static uploadAvatar(data: UsersUploadAvatarData): CancelablePromise<UsersUploadAvatarResponse> {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/v1/users/me/avatar',
-            formData: data.file,
+            formData: data.formData,
             mediaType: 'multipart/form-data',
             errors: {
                 422: 'Validation Error'
@@ -351,7 +462,7 @@ export class UsersService {
      * @returns UserPublic Successful Response
      * @throws ApiError
      */
-    public static deleteAvatarMe(): CancelablePromise<UsersDeleteAvatarMeResponse> {
+    public static deleteAvatar(): CancelablePromise<UsersDeleteAvatarResponse> {
         return __request(OpenAPI, {
             method: 'DELETE',
             url: '/api/v1/users/me/avatar'

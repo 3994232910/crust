@@ -9,37 +9,109 @@ export type Body_login_login_access_token = {
     client_secret?: (string | null);
 };
 
+export type Body_users_upload_avatar = {
+    file: string;
+};
+
+/**
+ * Model for creating a new forge.
+ */
+export type ForgeCreate = {
+    title: string;
+    content?: string;
+    is_folder?: boolean;
+    parent_id?: (string | null);
+};
+
+/**
+ * Model for returning forge data via API.
+ */
+export type ForgePublic = {
+    title: string;
+    content?: string;
+    is_folder?: boolean;
+    parent_id?: (string | null);
+    id: string;
+    owner_id: string;
+    created_at: string;
+    updated_at: string;
+};
+
+/**
+ * Model for returning list of forges via API.
+ */
+export type ForgesPublic = {
+    data: Array<ForgePublic>;
+    count: number;
+};
+
+/**
+ * Model for updating forge information.
+ */
+export type ForgeUpdate = {
+    title?: (string | null);
+    content?: (string | null);
+    is_folder?: (boolean | null);
+};
+
 export type HTTPValidationError = {
     detail?: Array<ValidationError>;
 };
 
+/**
+ * Model for creating a new item.
+ */
 export type ItemCreate = {
     title: string;
     description?: (string | null);
+    content?: (string | null);
+    is_folder?: boolean;
+    parent_id?: (string | null);
 };
 
+/**
+ * Model for returning item data via API.
+ */
 export type ItemPublic = {
     title: string;
     description?: (string | null);
+    content?: (string | null);
+    is_folder?: boolean;
+    parent_id?: (string | null);
     id: string;
     owner_id: string;
     created_at?: (string | null);
 };
 
+/**
+ * Model for returning list of items via API.
+ */
 export type ItemsPublic = {
     data: Array<ItemPublic>;
     count: number;
 };
 
+/**
+ * Model for updating item information.
+ */
 export type ItemUpdate = {
     title?: (string | null);
     description?: (string | null);
+    content?: (string | null);
+    is_folder?: boolean;
+    parent_id?: (string | null);
 };
 
+/**
+ * Standard response message model.
+ */
 export type Message = {
     message: string;
 };
 
+/**
+ * Password reset model.
+ */
 export type NewPassword = {
     token: string;
     new_password: string;
@@ -52,53 +124,79 @@ export type PrivateUserCreate = {
     is_verified?: boolean;
 };
 
+/**
+ * Authentication token response model.
+ */
 export type Token = {
     access_token: string;
     token_type?: string;
 };
 
+/**
+ * Model for updating user password.
+ */
 export type UpdatePassword = {
     current_password: string;
     new_password: string;
 };
 
+/**
+ * Model for creating a new user.
+ */
 export type UserCreate = {
     email: string;
     is_active?: boolean;
     is_superuser?: boolean;
     full_name?: (string | null);
+    avatar_url?: (string | null);
     password: string;
 };
 
+/**
+ * Model for returning user data via API.
+ */
 export type UserPublic = {
     email: string;
     is_active?: boolean;
     is_superuser?: boolean;
     full_name?: (string | null);
+    avatar_url?: (string | null);
     id: string;
     created_at?: (string | null);
-    avatar_url?: (string | null);
 };
 
+/**
+ * Model for user registration.
+ */
 export type UserRegister = {
     email: string;
     password: string;
     full_name?: (string | null);
 };
 
+/**
+ * Model for returning list of users via API.
+ */
 export type UsersPublic = {
     data: Array<UserPublic>;
     count: number;
 };
 
+/**
+ * Model for updating user information.
+ */
 export type UserUpdate = {
     email?: (string | null);
     is_active?: boolean;
     is_superuser?: boolean;
     full_name?: (string | null);
+    avatar_url?: (string | null);
     password?: (string | null);
 };
 
+/**
+ * Model for user to update their own information.
+ */
 export type UserUpdateMe = {
     full_name?: (string | null);
     email?: (string | null);
@@ -114,6 +212,38 @@ export type ValidationError = {
         [key: string]: unknown;
     };
 };
+
+export type ForgeReadForgesData = {
+    limit?: number;
+    skip?: number;
+};
+
+export type ForgeReadForgesResponse = (ForgesPublic);
+
+export type ForgeCreateForgeData = {
+    requestBody: ForgeCreate;
+};
+
+export type ForgeCreateForgeResponse = (ForgePublic);
+
+export type ForgeReadForgeData = {
+    id: string;
+};
+
+export type ForgeReadForgeResponse = (ForgePublic);
+
+export type ForgeUpdateForgeData = {
+    id: string;
+    requestBody: ForgeUpdate;
+};
+
+export type ForgeUpdateForgeResponse = (ForgePublic);
+
+export type ForgeDeleteForgeData = {
+    id: string;
+};
+
+export type ForgeDeleteForgeResponse = (Message);
 
 export type ItemsReadItemsData = {
     limit?: number;
@@ -202,15 +332,13 @@ export type UsersUpdateUserMeData = {
 
 export type UsersUpdateUserMeResponse = (UserPublic);
 
-export type UsersUploadAvatarMeData = {
-    file: File;
+export type UsersUploadAvatarData = {
+    formData: Body_users_upload_avatar;
 };
 
-export type UsersUploadAvatarMeResponse = (UserPublic);
+export type UsersUploadAvatarResponse = (UserPublic);
 
-export type UsersDeleteAvatarMeData = Record<string, never>;
-
-export type UsersDeleteAvatarMeResponse = (UserPublic);
+export type UsersDeleteAvatarResponse = (UserPublic);
 
 export type UsersUpdatePasswordMeData = {
     requestBody: UpdatePassword;
