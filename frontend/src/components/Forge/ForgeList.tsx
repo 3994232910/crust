@@ -204,9 +204,33 @@ export function ForgeList() {
 
   const handleCreateFileInFolder = async (folderId: string, name: string, isFolder: boolean = false) => {
     try {
+      // Check for duplicate names in the same parent folder
+      const existingInFolder = forges.filter(f => 
+        f.parent_id === folderId && 
+        f.title.toLowerCase() === name.toLowerCase().trim()
+      )
+      
+      let finalName = name.trim()
+      
+      // If duplicate found, add number suffix with parentheses
+      if (existingInFolder.length > 0) {
+        const baseName = finalName
+        let counter = 1
+        
+        // Keep incrementing until we find a unique name
+        while (forges.some(f => 
+          f.parent_id === folderId && 
+          f.title.toLowerCase() === `${baseName} (${counter})`.toLowerCase()
+        )) {
+          counter++
+        }
+        
+        finalName = `${baseName} (${counter})`
+      }
+      
       const response = await ForgeService.createForge({
         requestBody: {
-          title: name.trim() || (isFolder ? "nebula" : "nova"),
+          title: finalName || (isFolder ? "nebula" : "nova"),
           content: "",
           is_folder: isFolder,
           parent_id: folderId,
