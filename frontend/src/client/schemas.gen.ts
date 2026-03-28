@@ -57,6 +57,176 @@ export const Body_login_login_access_tokenSchema = {
     title: 'Body_login-login_access_token'
 } as const;
 
+export const Body_users_upload_avatarSchema = {
+    properties: {
+        file: {
+            type: 'string',
+            contentMediaType: 'application/octet-stream',
+            title: 'File'
+        }
+    },
+    type: 'object',
+    required: ['file'],
+    title: 'Body_users-upload_avatar'
+} as const;
+
+export const ForgeCreateSchema = {
+    properties: {
+        title: {
+            type: 'string',
+            maxLength: 255,
+            minLength: 1,
+            title: 'Title'
+        },
+        content: {
+            type: 'string',
+            title: 'Content',
+            default: ''
+        },
+        is_folder: {
+            type: 'boolean',
+            title: 'Is Folder',
+            default: false
+        },
+        parent_id: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'uuid'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Parent Id'
+        }
+    },
+    type: 'object',
+    required: ['title'],
+    title: 'ForgeCreate',
+    description: 'Model for creating a new forge.'
+} as const;
+
+export const ForgePublicSchema = {
+    properties: {
+        title: {
+            type: 'string',
+            maxLength: 255,
+            minLength: 1,
+            title: 'Title'
+        },
+        content: {
+            type: 'string',
+            title: 'Content',
+            default: ''
+        },
+        is_folder: {
+            type: 'boolean',
+            title: 'Is Folder',
+            default: false
+        },
+        parent_id: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'uuid'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Parent Id'
+        },
+        id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Id'
+        },
+        owner_id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Owner Id'
+        },
+        created_at: {
+            type: 'string',
+            format: 'date-time',
+            title: 'Created At'
+        },
+        updated_at: {
+            type: 'string',
+            format: 'date-time',
+            title: 'Updated At'
+        }
+    },
+    type: 'object',
+    required: ['title', 'id', 'owner_id', 'created_at', 'updated_at'],
+    title: 'ForgePublic',
+    description: 'Model for returning forge data via API.'
+} as const;
+
+export const ForgeUpdateSchema = {
+    properties: {
+        title: {
+            anyOf: [
+                {
+                    type: 'string',
+                    maxLength: 255,
+                    minLength: 1
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Title'
+        },
+        content: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Content'
+        },
+        is_folder: {
+            anyOf: [
+                {
+                    type: 'boolean'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Is Folder'
+        }
+    },
+    type: 'object',
+    title: 'ForgeUpdate',
+    description: 'Model for updating forge information.'
+} as const;
+
+export const ForgesPublicSchema = {
+    properties: {
+        data: {
+            items: {
+                '$ref': '#/components/schemas/ForgePublic'
+            },
+            type: 'array',
+            title: 'Data'
+        },
+        count: {
+            type: 'integer',
+            title: 'Count'
+        }
+    },
+    type: 'object',
+    required: ['data', 'count'],
+    title: 'ForgesPublic',
+    description: 'Model for returning list of forges via API.'
+} as const;
+
 export const HTTPValidationErrorSchema = {
     properties: {
         detail: {
@@ -90,11 +260,40 @@ export const ItemCreateSchema = {
                 }
             ],
             title: 'Description'
+        },
+        content: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Content'
+        },
+        is_folder: {
+            type: 'boolean',
+            title: 'Is Folder',
+            default: false
+        },
+        parent_id: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'uuid'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Parent Id'
         }
     },
     type: 'object',
     required: ['title'],
-    title: 'ItemCreate'
+    title: 'ItemCreate',
+    description: 'Model for creating a new item.'
 } as const;
 
 export const ItemPublicSchema = {
@@ -116,6 +315,34 @@ export const ItemPublicSchema = {
                 }
             ],
             title: 'Description'
+        },
+        content: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Content'
+        },
+        is_folder: {
+            type: 'boolean',
+            title: 'Is Folder',
+            default: false
+        },
+        parent_id: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'uuid'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Parent Id'
         },
         id: {
             type: 'string',
@@ -142,7 +369,8 @@ export const ItemPublicSchema = {
     },
     type: 'object',
     required: ['title', 'id', 'owner_id'],
-    title: 'ItemPublic'
+    title: 'ItemPublic',
+    description: 'Model for returning item data via API.'
 } as const;
 
 export const ItemUpdateSchema = {
@@ -171,10 +399,39 @@ export const ItemUpdateSchema = {
                 }
             ],
             title: 'Description'
+        },
+        content: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Content'
+        },
+        is_folder: {
+            type: 'boolean',
+            title: 'Is Folder',
+            default: false
+        },
+        parent_id: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'uuid'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Parent Id'
         }
     },
     type: 'object',
-    title: 'ItemUpdate'
+    title: 'ItemUpdate',
+    description: 'Model for updating item information.'
 } as const;
 
 export const ItemsPublicSchema = {
@@ -193,7 +450,8 @@ export const ItemsPublicSchema = {
     },
     type: 'object',
     required: ['data', 'count'],
-    title: 'ItemsPublic'
+    title: 'ItemsPublic',
+    description: 'Model for returning list of items via API.'
 } as const;
 
 export const MessageSchema = {
@@ -205,7 +463,8 @@ export const MessageSchema = {
     },
     type: 'object',
     required: ['message'],
-    title: 'Message'
+    title: 'Message',
+    description: 'Standard response message model.'
 } as const;
 
 export const NewPasswordSchema = {
@@ -223,7 +482,8 @@ export const NewPasswordSchema = {
     },
     type: 'object',
     required: ['token', 'new_password'],
-    title: 'NewPassword'
+    title: 'NewPassword',
+    description: 'Password reset model.'
 } as const;
 
 export const PrivateUserCreateSchema = {
@@ -265,7 +525,8 @@ export const TokenSchema = {
     },
     type: 'object',
     required: ['access_token'],
-    title: 'Token'
+    title: 'Token',
+    description: 'Authentication token response model.'
 } as const;
 
 export const UpdatePasswordSchema = {
@@ -285,7 +546,8 @@ export const UpdatePasswordSchema = {
     },
     type: 'object',
     required: ['current_password', 'new_password'],
-    title: 'UpdatePassword'
+    title: 'UpdatePassword',
+    description: 'Model for updating user password.'
 } as const;
 
 export const UserCreateSchema = {
@@ -318,6 +580,18 @@ export const UserCreateSchema = {
             ],
             title: 'Full Name'
         },
+        avatar_url: {
+            anyOf: [
+                {
+                    type: 'string',
+                    maxLength: 500
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Avatar Url'
+        },
         password: {
             type: 'string',
             maxLength: 128,
@@ -327,7 +601,8 @@ export const UserCreateSchema = {
     },
     type: 'object',
     required: ['email', 'password'],
-    title: 'UserCreate'
+    title: 'UserCreate',
+    description: 'Model for creating a new user.'
 } as const;
 
 export const UserPublicSchema = {
@@ -360,6 +635,18 @@ export const UserPublicSchema = {
             ],
             title: 'Full Name'
         },
+        avatar_url: {
+            anyOf: [
+                {
+                    type: 'string',
+                    maxLength: 500
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Avatar Url'
+        },
         id: {
             type: 'string',
             format: 'uuid',
@@ -380,7 +667,8 @@ export const UserPublicSchema = {
     },
     type: 'object',
     required: ['email', 'id'],
-    title: 'UserPublic'
+    title: 'UserPublic',
+    description: 'Model for returning user data via API.'
 } as const;
 
 export const UserRegisterSchema = {
@@ -412,7 +700,8 @@ export const UserRegisterSchema = {
     },
     type: 'object',
     required: ['email', 'password'],
-    title: 'UserRegister'
+    title: 'UserRegister',
+    description: 'Model for user registration.'
 } as const;
 
 export const UserUpdateSchema = {
@@ -452,6 +741,18 @@ export const UserUpdateSchema = {
             ],
             title: 'Full Name'
         },
+        avatar_url: {
+            anyOf: [
+                {
+                    type: 'string',
+                    maxLength: 500
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Avatar Url'
+        },
         password: {
             anyOf: [
                 {
@@ -467,7 +768,8 @@ export const UserUpdateSchema = {
         }
     },
     type: 'object',
-    title: 'UserUpdate'
+    title: 'UserUpdate',
+    description: 'Model for updating user information.'
 } as const;
 
 export const UserUpdateMeSchema = {
@@ -496,10 +798,23 @@ export const UserUpdateMeSchema = {
                 }
             ],
             title: 'Email'
+        },
+        avatar_url: {
+            anyOf: [
+                {
+                    type: 'string',
+                    maxLength: 500
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Avatar Url'
         }
     },
     type: 'object',
-    title: 'UserUpdateMe'
+    title: 'UserUpdateMe',
+    description: 'Model for user to update their own information.'
 } as const;
 
 export const UsersPublicSchema = {
@@ -518,7 +833,8 @@ export const UsersPublicSchema = {
     },
     type: 'object',
     required: ['data', 'count'],
-    title: 'UsersPublic'
+    title: 'UsersPublic',
+    description: 'Model for returning list of users via API.'
 } as const;
 
 export const ValidationErrorSchema = {

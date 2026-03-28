@@ -4,8 +4,11 @@ Database models package.
 This package contains all database models organized by domain:
 - user: User authentication and management
 - item: Generic content items
+- forge: Forge notes (Obsidian-like)
 - common: Shared utility models
 """
+
+from sqlmodel import SQLModel
 
 from app.models.user import (
     User,
@@ -25,6 +28,13 @@ from app.models.item import (
     ItemPublic,
     ItemsPublic,
 )
+from app.models.forge import (
+    Forge,
+    ForgeCreate,
+    ForgeUpdate,
+    ForgePublic,
+    ForgesPublic,
+)
 from app.models.common import (
     Message,
     Token,
@@ -33,6 +43,8 @@ from app.models.common import (
 )
 
 __all__ = [
+    # SQLModel base
+    "SQLModel",
     # User
     "User",
     "UserCreate",
@@ -49,6 +61,12 @@ __all__ = [
     "ItemUpdate",
     "ItemPublic",
     "ItemsPublic",
+    # Forge
+    "Forge",
+    "ForgeCreate",
+    "ForgeUpdate",
+    "ForgePublic",
+    "ForgesPublic",
     # Common
     "Message",
     "Token",
