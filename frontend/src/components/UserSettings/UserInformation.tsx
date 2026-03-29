@@ -117,7 +117,7 @@ const UserInformation = () => {
 
   // Delete avatar mutation
   const deleteAvatarMutation = useMutation({
-    mutationFn: () => UsersService.deleteAvatarMe(),
+    mutationFn: () => UsersService.deleteAvatar(),
     onSuccess: () => {
       showSuccessToast("Avatar deleted successfully")
       queryClient.invalidateQueries()

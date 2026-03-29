@@ -8,7 +8,8 @@ import {
   ChevronDown,
   Folder,
   X,
-  Trash2
+  Trash2,
+  Telescope
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -24,6 +25,7 @@ import {
 import { Label } from "@/components/ui/label"
 import useToast from "@/hooks/useCustomToast"
 import { ForgeService, type ForgesPublic, type ForgePublic } from "@/client"
+import StarGazingView from './StarGazingView'
 
 interface Forge extends Omit<ForgePublic, 'content' | 'is_folder'> {
   content?: string
@@ -43,6 +45,7 @@ export function ForgeList() {
   const [editContent, setEditContent] = useState("")
   const [sidebarWidth, setSidebarWidth] = useState(256)
   const [isResizing, setIsResizing] = useState(false)
+  const [showStarGazing, setShowStarGazing] = useState(false)
   
   const toast = useToast()
 
@@ -315,7 +318,27 @@ export function ForgeList() {
   const rootForges = filteredForges.filter(f => !f.parent_id)
 
   return (
-    <div className="flex h-[calc(100vh-12rem)] gap-4">
+    <div className="flex flex-col h-full">
+      {/* 顶部工具栏 */}
+      <div className="flex items-center justify-between p-4 border-b">
+        <div className="flex items-center gap-2">
+          <Button 
+            variant="ghost" 
+            size="icon"
+            onClick={() => setShowStarGazing(true)}
+            title="Star Gazing View"
+          >
+            <Telescope className="h-5 w-5" />
+          </Button>
+          <Button variant="ghost" size="icon" onClick={handleCreateNew} title="New Note" className="h-8 w-8">
+            <Plus className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="icon" onClick={handleCreateFolder} title="New Folder" className="h-8 w-8">
+            <FolderPlus className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+      
       {/* Sidebar - File Tree */}
       <div style={{ width: sidebarWidth, minWidth: sidebarWidth }} className="pr-4">
         <div className="mb-4">
@@ -460,6 +483,11 @@ export function ForgeList() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      
+      {/* 星球视图 */}
+      {showStarGazing && (
+        <StarGazingView onClose={() => setShowStarGazing(false)} />
+      )}
     </div>
   )
 }
