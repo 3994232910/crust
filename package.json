@@ -11,11 +11,9 @@
     "test:ui": "bun run --filter frontend test:ui"
   },
   "dependencies": {
-    "@react-three/drei": "^10.7.7",
-    "@react-three/fiber": "^9.5.0",
-    "three": "^0.183.2"
+
   },
   "devDependencies": {
-    "@types/three": "^0.183.1"
+
   }
 }
