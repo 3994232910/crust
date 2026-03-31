@@ -14,7 +14,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar"
 
-type LucideIcon = React.FC<React.SVGProps<SVGSVGElement>>
+type LucideIcon = React.ComponentType<React.SVGProps<SVGSVGElement>>
 
 const ICON_MAP: Record<Theme, LucideIcon> = {
   system: Monitor,
