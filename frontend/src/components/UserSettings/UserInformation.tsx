@@ -59,10 +59,11 @@ const UserInformation = () => {
     onSuccess: () => {
       showSuccessToast("User updated successfully")
       toggleEditMode()
+      queryClient.invalidateQueries({ queryKey: ["currentUser"] })
     },
     onError: handleError.bind(showErrorToast),
     onSettled: () => {
-      queryClient.invalidateQueries()
+      queryClient.invalidateQueries({ queryKey: ["currentUser"] })
     },
   })
 
@@ -110,7 +111,7 @@ const UserInformation = () => {
     },
     onSuccess: () => {
       showSuccessToast("Avatar uploaded successfully")
-      queryClient.invalidateQueries()
+      queryClient.invalidateQueries({ queryKey: ["currentUser"] })
     },
     onError: handleError.bind(showErrorToast),
   })
@@ -120,7 +121,7 @@ const UserInformation = () => {
     mutationFn: () => UsersService.deleteAvatar(),
     onSuccess: () => {
       showSuccessToast("Avatar deleted successfully")
-      queryClient.invalidateQueries()
+      queryClient.invalidateQueries({ queryKey: ["currentUser"] })
     },
     onError: handleError.bind(showErrorToast),
   })
