@@ -17,9 +17,9 @@ import {
 type LucideIcon = React.ComponentType<React.SVGProps<SVGSVGElement>>
 
 const ICON_MAP: Record<Theme, LucideIcon> = {
-  system: Monitor,
-  light: Sun,
-  dark: Moon,
+  system: Monitor as unknown as LucideIcon,
+  light: Sun as unknown as LucideIcon,
+  dark: Moon as unknown as LucideIcon,
 }
 
 export const SidebarAppearance = () => {

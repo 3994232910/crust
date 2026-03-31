@@ -46,9 +46,9 @@ function UserInfo({ fullName, email, avatarUrl }: UserInfoProps) {
           </AvatarFallback>
         )}
       </Avatar>
-      <div className="flex flex-col items-start min-w-0">
-        <p className="text-sm font-medium truncate w-full">{fullName}</p>
-        <p className="text-xs text-muted-foreground truncate w-full">{email}</p>
+      <div className="flex flex-col gap-0.5 min-w-0">
+        <p className="text-sm font-medium truncate">{fullName}</p>
+        <p className="text-xs text-muted-foreground truncate">{email}</p>
       </div>
     </div>
   )
