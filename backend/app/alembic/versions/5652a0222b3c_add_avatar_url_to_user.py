@@ -1,7 +1,7 @@
 """Add avatar_url to User
 
 Revision ID: 5652a0222b3c
-Revises: 9ed6910b19de
+Revises: fe56fa70289e
 Create Date: 2026-04-02 09:19:02.431083
 
 """
@@ -12,7 +12,7 @@ import sqlmodel.sql.sqltypes
 
 # revision identifiers, used by Alembic.
 revision = '5652a0222b3c'
-down_revision = '9ed6910b19de'
+down_revision = 'fe56fa70289e'
 branch_labels = None
 depends_on = None
 
