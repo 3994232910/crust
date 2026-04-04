@@ -316,31 +316,20 @@ export function ForgeList() {
   const rootForges = filteredForges.filter(f => !f.parent_id)
 
   return (
-    <div className="flex flex-col h-full">
-      {/* 顶部工具栏 */}
-      <div className="flex items-center justify-between p-4 border-b">
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setShowStarGazing(true)}
-            title="Star Gazing View"
-          >
-            <Telescope className="h-5 w-5" />
-          </Button>
-          <Button variant="ghost" size="icon" onClick={handleCreateNew} title="New Note" className="h-8 w-8">
-            <Plus className="h-4 w-4" />
-          </Button>
-          <Button variant="ghost" size="icon" onClick={handleCreateFolder} title="New Folder" className="h-8 w-8">
-            <FolderPlus className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
-
+    <div className="flex h-full w-full">
       {/* Sidebar - File Tree */}
-      <div style={{ width: sidebarWidth, minWidth: sidebarWidth }} className="pr-4">
-        <div className="mb-4">
-          <div className="flex gap-1 mb-2">
+      <div style={{ width: sidebarWidth, minWidth: sidebarWidth }} className="flex flex-col border-r pr-4">
+        {/* 顶部工具栏 */}
+        <div className="flex items-center justify-between p-4 border-b">
+          <div className="flex items-center gap-2">
+            <Button 
+              variant="ghost" 
+              size="icon"
+              onClick={() => setShowStarGazing(true)}
+              title="Star Gazing View"
+            >
+              <Telescope className="h-5 w-5" />
+            </Button>
             <Button variant="ghost" size="icon" onClick={handleCreateNew} title="New Note" className="h-8 w-8">
               <Plus className="h-4 w-4" />
             </Button>
@@ -348,29 +337,35 @@ export function ForgeList() {
               <FolderPlus className="h-4 w-4" />
             </Button>
           </div>
-          <div className="relative">
-            <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Search..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-8 h-8 text-sm"
-            />
-          </div>
         </div>
+        
+        {/* 搜索框和文件树 */}
+        <div className="flex-1 overflow-hidden">
+          <div className="mb-4 p-4">
+            <div className="relative">
+              <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-8 h-8 text-sm"
+              />
+            </div>
+          </div>
 
-        <div className="space-y-1 overflow-y-auto max-h-[calc(100vh-18rem)]">
-          {rootForges.map((forge) => (
-            <TreeItem
-              key={forge.id}
-              forge={forge}
-              allForges={filteredForges}
-              selectedFolderId={selectedFolderId}
-              onSelect={handleSelectForge}
-              onDelete={handleDeleteForge}
-              onCreateFile={handleCreateFileInFolder}
-            />
-          ))}
+          <div className="space-y-1 overflow-y-auto px-4" style={{ maxHeight: 'calc(100vh - 16rem)' }}>
+            {rootForges.map((forge) => (
+              <TreeItem
+                key={forge.id}
+                forge={forge}
+                allForges={filteredForges}
+                selectedFolderId={selectedFolderId}
+                onSelect={handleSelectForge}
+                onDelete={handleDeleteForge}
+                onCreateFile={handleCreateFileInFolder}
+              />
+            ))}
+          </div>
         </div>
       </div>
 
@@ -384,7 +379,7 @@ export function ForgeList() {
       />
 
       {/* Main Content - Editor */}
-      <div className="flex-1 flex flex-col min-w-0 pl-4">
+      <div className="flex-1 flex flex-col min-w-0 pl-4 pr-4">
         {selectedForge ? (
           <>
             {/* Toolbar */}
