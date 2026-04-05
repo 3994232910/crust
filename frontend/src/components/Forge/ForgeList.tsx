@@ -316,11 +316,11 @@ export function ForgeList() {
   const rootForges = filteredForges.filter(f => !f.parent_id)
 
   return (
-    <div className="flex h-full w-full">
+    <div className="flex h-full w-full overflow-hidden">
       {/* Sidebar - File Tree */}
-      <div style={{ width: sidebarWidth, minWidth: sidebarWidth }} className="flex flex-col border-r pr-4">
+      <div style={{ width: sidebarWidth, minWidth: sidebarWidth }} className="flex flex-col border-r pr-4 h-full">
         {/* 顶部工具栏 */}
-        <div className="flex items-center justify-between p-4 border-b">
+        <div className="flex items-center justify-between p-4 border-b shrink-0">
           <div className="flex items-center gap-2">
             <Button 
               variant="ghost" 
@@ -340,8 +340,8 @@ export function ForgeList() {
         </div>
         
         {/* 搜索框和文件树 */}
-        <div className="flex-1 overflow-hidden">
-          <div className="mb-4 p-4">
+        <div className="flex-1 overflow-hidden flex flex-col">
+          <div className="p-4 shrink-0">
             <div className="relative">
               <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -353,18 +353,20 @@ export function ForgeList() {
             </div>
           </div>
 
-          <div className="space-y-1 overflow-y-auto px-4" style={{ maxHeight: 'calc(100vh - 16rem)' }}>
-            {rootForges.map((forge) => (
-              <TreeItem
-                key={forge.id}
-                forge={forge}
-                allForges={filteredForges}
-                selectedFolderId={selectedFolderId}
-                onSelect={handleSelectForge}
-                onDelete={handleDeleteForge}
-                onCreateFile={handleCreateFileInFolder}
-              />
-            ))}
+          <div className="flex-1 overflow-y-auto px-4 pb-4">
+            <div className="space-y-1">
+              {rootForges.map((forge) => (
+                <TreeItem
+                  key={forge.id}
+                  forge={forge}
+                  allForges={filteredForges}
+                  selectedFolderId={selectedFolderId}
+                  onSelect={handleSelectForge}
+                  onDelete={handleDeleteForge}
+                  onCreateFile={handleCreateFileInFolder}
+                />
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -379,11 +381,11 @@ export function ForgeList() {
       />
 
       {/* Main Content - Editor */}
-      <div className="flex-1 flex flex-col min-w-0 pl-4 pr-4">
+      <div className="flex-1 flex flex-col min-w-0 pl-4 pr-4 h-full overflow-hidden">
         {selectedForge ? (
           <>
             {/* Toolbar */}
-            <div className="flex items-center justify-between pb-4 border-b">
+            <div className="flex items-center justify-between pb-4 border-b shrink-0">
               <div className="flex items-center gap-2 flex-1">
                 <Input
                   value={editTitle}
