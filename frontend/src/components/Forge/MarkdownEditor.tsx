@@ -1,60 +1,20 @@
-import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import rehypeHighlight from 'rehype-highlight'
-import { Pen, Eye, Split } from 'lucide-react'
 import 'katex/dist/katex.min.css'
 import 'highlight.js/styles/github-dark.css'
 
 interface MarkdownEditorProps {
   content: string
   onChange: (content: string) => void
+  viewMode: 'edit' | 'preview' | 'split'
 }
 
-export function MarkdownEditor({ content, onChange }: MarkdownEditorProps) {
-  const [viewMode, setViewMode] = useState<'edit' | 'preview' | 'split'>('split')
-
+export function MarkdownEditor({ content, onChange, viewMode }: MarkdownEditorProps) {
   return (
     <div className="flex flex-col h-full">
-      {/* 视图切换工具栏 */}
-      <div className="flex items-center gap-1 p-2 border-b bg-muted/50">
-        <button
-          onClick={() => setViewMode('edit')}
-          className={`p-1.5 rounded transition-colors ${
-            viewMode === 'edit'
-              ? 'bg-primary text-primary-foreground'
-              : 'hover:bg-accent text-muted-foreground'
-          }`}
-          title="Edit Mode"
-        >
-          <Pen className="h-4 w-4" />
-        </button>
-        <button
-          onClick={() => setViewMode('preview')}
-          className={`p-1.5 rounded transition-colors ${
-            viewMode === 'preview'
-              ? 'bg-primary text-primary-foreground'
-              : 'hover:bg-accent text-muted-foreground'
-          }`}
-          title="Preview Mode"
-        >
-          <Eye className="h-4 w-4" />
-        </button>
-        <button
-          onClick={() => setViewMode('split')}
-          className={`p-1.5 rounded transition-colors ${
-            viewMode === 'split'
-              ? 'bg-primary text-primary-foreground'
-              : 'hover:bg-accent text-muted-foreground'
-          }`}
-          title="Split View"
-        >
-          <Split className="h-4 w-4" />
-        </button>
-      </div>
-
       {/* 内容区域 */}
       <div className="flex-1 flex overflow-hidden">
         {/* 编辑区 */}
