@@ -9,7 +9,10 @@ import {
   Folder,
   X,
   Trash2,
-  Telescope
+  Telescope,
+  Pen,
+  Eye,
+  Split
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -48,6 +51,7 @@ export function ForgeList() {
   const [sidebarWidth, setSidebarWidth] = useState(256)
   const [isResizing, setIsResizing] = useState(false)
   const [showStarGazing, setShowStarGazing] = useState(false)
+  const [viewMode, setViewMode] = useState<'edit' | 'preview' | 'split'>('split')
 
   const toast = useToast()
 
@@ -394,7 +398,40 @@ export function ForgeList() {
                   placeholder="Note title..."
                 />
               </div>
-              <div className="flex gap-2">
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setViewMode('edit')}
+                  className={`p-1.5 rounded transition-colors ${
+                    viewMode === 'edit'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'hover:bg-accent text-muted-foreground'
+                  }`}
+                  title="Edit Mode"
+                >
+                  <Pen className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => setViewMode('preview')}
+                  className={`p-1.5 rounded transition-colors ${
+                    viewMode === 'preview'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'hover:bg-accent text-muted-foreground'
+                  }`}
+                  title="Preview Mode"
+                >
+                  <Eye className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => setViewMode('split')}
+                  className={`p-1.5 rounded transition-colors ${
+                    viewMode === 'split'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'hover:bg-accent text-muted-foreground'
+                  }`}
+                  title="Split View"
+                >
+                  <Split className="h-4 w-4" />
+                </button>
                 <Button variant="ghost" size="icon" onClick={() => handleDeleteForge(selectedForge.id)}>
                   <Trash2 className="h-4 w-4 text-destructive" />
                 </Button>
@@ -406,6 +443,7 @@ export function ForgeList() {
               <MarkdownEditor
                 content={editContent}
                 onChange={setEditContent}
+                viewMode={viewMode}
               />
             </div>
           </>

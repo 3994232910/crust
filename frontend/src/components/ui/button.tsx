@@ -42,7 +42,7 @@ function Button({
   size,
   asChild = false,
   ...props
-}: React.ComponentProps<"button"> &
+}: Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, "ref"> &
   VariantProps<typeof buttonVariants> & {
     asChild?: boolean
   }) {

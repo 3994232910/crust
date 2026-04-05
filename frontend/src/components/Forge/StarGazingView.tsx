@@ -1,6 +1,6 @@
 /// <reference types="@react-three/fiber" />
 import { useRef, useState, useMemo, useEffect } from 'react'
-import { Canvas, useFrame } from '@react-three/fiber'
+import { Canvas, useFrame, type ThreeElements } from '@react-three/fiber'
 import { OrbitControls, Text, Sphere, MeshDistortMaterial } from '@react-three/drei'
 import * as THREE from 'three'
 import { FileText, Folder, X } from 'lucide-react'
