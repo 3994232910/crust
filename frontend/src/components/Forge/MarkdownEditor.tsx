@@ -4,6 +4,7 @@ import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import rehypeHighlight from 'rehype-highlight'
+import { Pen, Eye, Split } from 'lucide-react'
 import 'katex/dist/katex.min.css'
 import 'highlight.js/styles/github-dark.css'
 
@@ -18,36 +19,39 @@ export function MarkdownEditor({ content, onChange }: MarkdownEditorProps) {
   return (
     <div className="flex flex-col h-full">
       {/* 视图切换工具栏 */}
-      <div className="flex items-center gap-2 p-2 border-b bg-muted/50">
+      <div className="flex items-center gap-1 p-2 border-b bg-muted/50">
         <button
           onClick={() => setViewMode('edit')}
-          className={`px-3 py-1 rounded text-sm transition-colors ${
-            viewMode === 'edit' 
-              ? 'bg-primary text-primary-foreground' 
-              : 'hover:bg-accent'
+          className={`p-1.5 rounded transition-colors ${
+            viewMode === 'edit'
+              ? 'bg-primary text-primary-foreground'
+              : 'hover:bg-accent text-muted-foreground'
           }`}
+          title="Edit Mode"
         >
-          Edit
+          <Pen className="h-4 w-4" />
         </button>
         <button
           onClick={() => setViewMode('preview')}
-          className={`px-3 py-1 rounded text-sm transition-colors ${
-            viewMode === 'preview' 
-              ? 'bg-primary text-primary-foreground' 
-              : 'hover:bg-accent'
+          className={`p-1.5 rounded transition-colors ${
+            viewMode === 'preview'
+              ? 'bg-primary text-primary-foreground'
+              : 'hover:bg-accent text-muted-foreground'
           }`}
+          title="Preview Mode"
         >
-          Preview
+          <Eye className="h-4 w-4" />
         </button>
         <button
           onClick={() => setViewMode('split')}
-          className={`px-3 py-1 rounded text-sm transition-colors ${
-            viewMode === 'split' 
-              ? 'bg-primary text-primary-foreground' 
-              : 'hover:bg-accent'
+          className={`p-1.5 rounded transition-colors ${
+            viewMode === 'split'
+              ? 'bg-primary text-primary-foreground'
+              : 'hover:bg-accent text-muted-foreground'
           }`}
+          title="Split View"
         >
-          Split View
+          <Split className="h-4 w-4" />
         </button>
       </div>
 
@@ -55,24 +59,30 @@ export function MarkdownEditor({ content, onChange }: MarkdownEditorProps) {
       <div className="flex-1 flex overflow-hidden">
         {/* 编辑区 */}
         {(viewMode === 'edit' || viewMode === 'split') && (
-          <textarea
-            value={content}
-            onChange={(e) => onChange(e.target.value)}
-            placeholder="# Start writing...
+          <div className={`overflow-hidden ${
+            viewMode === 'split' ? 'flex-1 w-1/2 border-r' : 'flex-1 w-full'
+          }`}>
+            <textarea
+              value={content}
+              onChange={(e) => onChange(e.target.value)}
+              placeholder="# Start writing...
 
 ## Features
 - **Bold** and *italic* text
 - Code blocks with syntax highlighting
 - Math formulas: $E = mc^2$
 - Tables, task lists, and more..."
-            className="flex-1 w-full p-4 font-mono text-sm bg-background resize-none focus:outline-none border-r"
-            spellCheck={false}
-          />
+              className="w-full h-full min-h-full p-4 font-mono text-sm bg-background resize-none focus:outline-none overflow-y-auto"
+              spellCheck={false}
+            />
+          </div>
         )}
 
         {/* 预览区 */}
         {(viewMode === 'preview' || viewMode === 'split') && (
-          <div className="flex-1 p-6 overflow-y-auto prose prose-invert max-w-none dark:prose-invert prose-headings:mt-6 prose-headings:mb-4 prose-p:my-3 prose-code:text-sm prose-pre:bg-muted/50">
+          <div className={`overflow-y-auto p-6 prose prose-invert max-w-none dark:prose-invert prose-headings:mt-6 prose-headings:mb-4 prose-p:my-3 prose-code:text-sm prose-pre:bg-muted/50 ${
+            viewMode === 'split' ? 'flex-1 w-1/2' : 'flex-1 w-full'
+          }`}>
             <ReactMarkdown
               remarkPlugins={[remarkGfm, remarkMath]}
               rehypePlugins={[rehypeKatex, rehypeHighlight]}
