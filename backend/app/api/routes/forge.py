@@ -1,8 +1,10 @@
 import uuid
 from typing import Any
+from pathlib import Path
+import shutil
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlmodel import Session, select
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from sqlmodel import Session, select, SQLModel
 
 from app.api.deps import CurrentUser, SessionDep
 from app.models.forge import Forge, ForgeCreate, ForgePublic, ForgesPublic, ForgeUpdate
@@ -11,6 +13,13 @@ from app.models import Message
 router = APIRouter(prefix="/forge", tags=["forge"])
 
 
+class ModelInfo(SQLModel):
+    url: str
+    filename: str
+    size: int
+
+
+# 1. 基础路由
 @router.get("/", response_model=ForgesPublic)
 def read_forges(
     session: SessionDep,
@@ -58,16 +67,94 @@ def create_forge(
     session.refresh(forge)
     return forge
 
+# 2. 模型路由（必须放在 /{id} 之前！）
+@router.post("/upload-model", response_model=dict)
+async def upload_model(
+    *,
+    current_user: CurrentUser,
+    file: UploadFile = File(...),
+) -> Any:
+    """Upload a 3D model file."""
+    allowed_types = ["model/gltf-binary", "model/gltf+json", "application/octet-stream"]
+    
+    if file.filename:
+        file_extension = file.filename.split(".")[-1].lower()
+        if file_extension not in ["glb", "gltf"]:
+            raise HTTPException(
+                status_code=400,
+                detail="File type not allowed. Only .glb and .gltf files are supported."
+            )
+    
+    contents = await file.read()
+    if len(contents) > 50 * 1024 * 1024:
+        raise HTTPException(
+            status_code=400,
+            detail="File size exceeds 50MB limit"
+        )
+    
+    models_dir = Path("models") / str(current_user.id)
+    models_dir.mkdir(parents=True, exist_ok=True)
+    
+    original_filename = file.filename or "model.glb"
+    safe_filename = f"{uuid.uuid4()}_{original_filename}"
+    file_path = models_dir / safe_filename
+    
+    with open(file_path, "wb") as f:
+        f.write(contents)
+    
+    model_url = f"/models/{current_user.id}/{safe_filename}"
+    
+    return {
+        "url": model_url,
+        "filename": safe_filename,
+        "size": len(contents)
+    }
 
+@router.get("/models", response_model=list[ModelInfo])
+def list_models(
+    *,
+    current_user: CurrentUser,
+) -> Any:
+    """List all uploaded 3D models."""
+    models_dir = Path("models") / str(current_user.id)
+    
+    if not models_dir.exists():
+        return []
+    
+    models = []
+    for file_path in models_dir.glob("*"):
+        if file_path.is_file():
+            models.append({
+                "url": f"/models/{current_user.id}/{file_path.name}",
+                "filename": file_path.name,
+                "size": file_path.stat().st_size,
+            })
+    
+    return models
+
+@router.delete("/models/{filename}")
+def delete_model(
+    *,
+    current_user: CurrentUser,
+    filename: str,
+) -> Message:
+    """Delete a 3D model file."""
+    file_path = Path("models") / str(current_user.id) / filename
+    
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Model not found")
+    
+    file_path.unlink()
+    return Message(message="Model deleted successfully")
+
+# 3. 动态 ID 路由（放在最后）
 @router.get("/{id}", response_model=ForgePublic)
 def read_forge(
     session: SessionDep,
     id: uuid.UUID,
     current_user: CurrentUser,
 ) -> Any:
-    """
-    Get forge by ID.
-    """
+    """Get forge by ID."""
     forge = session.get(Forge, id)
     if not forge:
         raise HTTPException(status_code=404, detail="Forge not found")
