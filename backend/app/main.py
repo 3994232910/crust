@@ -35,6 +35,11 @@ avatars_dir = Path("avatars")
 avatars_dir.mkdir(exist_ok=True)
 app.mount("/avatars", StaticFiles(directory=avatars_dir), name="avatars")
 
+# Mount static files for 3D models
+models_dir = Path("models")
+models_dir.mkdir(exist_ok=True)
+app.mount("/models", StaticFiles(directory=models_dir), name="models")
+
 # Set all CORS enabled origins
 if settings.all_cors_origins:
     app.add_middleware(
