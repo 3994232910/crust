@@ -1,6 +1,7 @@
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
@@ -47,10 +48,14 @@ export function ModelUploadDialog({
   const loadModels = async () => {
     try {
       const response = await fetch("/api/v1/forge/models")
-      if (!response.ok) throw new Error("Failed to load models")
+      if (!response.ok) {
+        console.error("Failed to load models:", response.status)
+        return
+      }
       const data = await response.json()
       setModels(data)
       setMode("select")
+      setSelectedIndex(0)
     } catch (error) {
       console.error("Failed to load models:", error)
     }
@@ -65,8 +70,15 @@ export function ModelUploadDialog({
     formData.append("file", file)
 
     try {
+      const token = localStorage.getItem("access_token")
+      const headers: Record<string, string> = {}
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`
+      }
+
       const response = await fetch("/api/v1/forge/upload-model", {
         method: "POST",
+        headers,
         body: formData,
       })
       if (!response.ok) throw new Error("Upload failed")
@@ -86,7 +98,23 @@ export function ModelUploadDialog({
   }, [onModelSelect])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (mode === "select") {
+    if (mode === "command") {
+      if (e.key === "ArrowDown") {
+        e.preventDefault()
+        setSelectedIndex((prev) => Math.min(prev + 1, 1))
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault()
+        setSelectedIndex((prev) => Math.max(prev - 1, 0))
+      } else if (e.key === "Enter") {
+        if (selectedIndex === 0 || command.toLowerCase() === "upload") {
+          inputRef.current?.click()
+        } else if (selectedIndex === 1 || command.toLowerCase() === "select") {
+          loadModels()
+        }
+      } else if (e.key === "Escape") {
+        onOpenChange(false)
+      }
+    } else if (mode === "select") {
       if (e.key === "ArrowDown") {
         e.preventDefault()
         setSelectedIndex((prev) => (prev + 1) % models.length)
@@ -99,16 +127,7 @@ export function ModelUploadDialog({
       } else if (e.key === "Escape") {
         setMode("command")
         setCommand("")
-      }
-    } else if (mode === "command") {
-      if (e.key === "Enter") {
-        if (command.toLowerCase() === "upload") {
-          inputRef.current?.click()
-        } else if (command.toLowerCase() === "select") {
-          loadModels()
-        }
-      } else if (e.key === "Escape") {
-        onOpenChange(false)
+        setSelectedIndex(0)
       }
     }
   }
@@ -121,6 +140,7 @@ export function ModelUploadDialog({
       
       <DialogContent className="sm:max-w-[500px] p-0 gap-0">
         <DialogTitle className="sr-only">3D Models</DialogTitle>
+        <DialogDescription className="sr-only">Upload or select a 3D model to insert into your note</DialogDescription>
         
         <div className="p-4 border-b">
           <div className="flex items-center gap-2 text-muted-foreground">
@@ -153,7 +173,9 @@ export function ModelUploadDialog({
               </div>
               <div 
                 className={`flex items-center justify-between px-2 py-2 rounded-md cursor-pointer ${selectedIndex === 1 ? "bg-accent" : ""}`}
-                onClick={loadModels}
+                onClick={() => {
+                  loadModels()
+                }}
               >
                 <div className="flex items-center gap-3">
                   <Box className="h-4 w-4 text-muted-foreground" />
