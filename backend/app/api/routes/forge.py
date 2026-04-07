@@ -72,42 +72,51 @@ def create_forge(
 async def upload_model(
     *,
     current_user: CurrentUser,
-    file: UploadFile = File(...),
+    files: list[UploadFile] = File(...),
 ) -> Any:
-    """Upload a 3D model file."""
-    allowed_types = ["model/gltf-binary", "model/gltf+json", "application/octet-stream"]
-    
-    if file.filename:
-        file_extension = file.filename.split(".")[-1].lower()
-        if file_extension not in ["glb", "gltf"]:
-            raise HTTPException(
-                status_code=400,
-                detail="File type not allowed. Only .glb and .gltf files are supported."
-            )
-    
-    contents = await file.read()
-    if len(contents) > 50 * 1024 * 1024:
-        raise HTTPException(
-            status_code=400,
-            detail="File size exceeds 50MB limit"
-        )
+    """Upload 3D model files (supports folder upload with .gltf + .bin + textures)."""
     
     models_dir = Path("models") / str(current_user.id)
     models_dir.mkdir(parents=True, exist_ok=True)
     
-    original_filename = file.filename or "model.glb"
-    safe_filename = f"{uuid.uuid4()}_{original_filename}"
-    file_path = models_dir / safe_filename
+    main_model_url = None
     
-    with open(file_path, "wb") as f:
-        f.write(contents)
+    for file in files:
+        if not file.filename:
+            continue
+        
+        filename = file.filename
+        file_extension = filename.split(".")[-1].lower()
+        
+        if file_extension not in ["glb", "gltf", "bin", "png", "jpg", "jpeg", "webp", "txt"]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported file type: {filename}"
+            )
+        
+        contents = await file.read()
+        if len(contents) > 100 * 1024 * 1024:
+            raise HTTPException(
+                status_code=400,
+                detail=f"File too large: {filename}"
+            )
+        
+        file_path = models_dir / filename
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        with open(file_path, "wb") as f:
+            f.write(contents)
+        
+        if file_extension in ["glb", "gltf"] and main_model_url is None:
+            main_model_url = f"/models/{current_user.id}/{filename}"
     
-    model_url = f"/models/{current_user.id}/{safe_filename}"
+    if not main_model_url:
+        raise HTTPException(status_code=400, detail="No valid model file found")
     
     return {
-        "url": model_url,
-        "filename": safe_filename,
-        "size": len(contents)
+        "url": main_model_url,
+        "filename": main_model_url.split("/")[-1],
+        "size": len(files)
     }
 
 @router.get("/models", response_model=list[ModelInfo])

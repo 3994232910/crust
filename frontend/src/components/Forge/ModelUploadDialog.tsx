@@ -62,12 +62,33 @@ export function ModelUploadDialog({
   }
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
+    const files = e.target.files
+    if (!files || files.length === 0) return
+
+    const fileArray = Array.from(files)
+    
+    if (fileArray.length === 0) {
+      alert('⚠️ 文件夹为空或未选择任何文件')
+      return
+    }
+
+    const hasGltf = fileArray.some(f => f.name.toLowerCase().endsWith('.gltf'))
+    const hasGlb = fileArray.some(f => f.name.toLowerCase().endsWith('.glb'))
+
+    if (!hasGltf && !hasGlb) {
+      alert('⚠️ 未在文件夹中找到 .gltf 或 .glb 文件\n\n请确保选择的是包含 3D 模型的文件夹')
+      e.target.value = ''
+      return
+    }
+
+    if (hasGltf) {
+      const hasBin = fileArray.some(f => f.name.toLowerCase().endsWith('.bin'))
+      if (!hasBin) {
+        alert('⚠️ 检测到 .gltf 文件但未找到对应的 .bin 文件\n\n模型可能无法正常渲染，建议检查文件完整性')
+      }
+    }
 
     setIsUploading(true)
-    const formData = new FormData()
-    formData.append("file", file)
 
     try {
       const token = localStorage.getItem("access_token")
@@ -76,17 +97,30 @@ export function ModelUploadDialog({
         headers["Authorization"] = `Bearer ${token}`
       }
 
+      const formData = new FormData()
+      
+      fileArray.forEach(file => {
+        const relativePath = (file as any).webkitRelativePath || file.name
+        formData.append("files", file, relativePath)
+      })
+
       const response = await fetch("/api/v1/forge/upload-model", {
         method: "POST",
         headers,
         body: formData,
       })
-      if (!response.ok) throw new Error("Upload failed")
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.detail || "Upload failed")
+      }
+      
       const data = await response.json()
       insertModelAtCursor(data.url)
       onOpenChange(false)
     } catch (error) {
       console.error("Upload failed:", error)
+      alert(`上传失败：${error instanceof Error ? error.message : '未知错误'}`)
     } finally {
       setIsUploading(false)
     }
@@ -227,7 +261,18 @@ export function ModelUploadDialog({
           </div>
         </div>
 
-        <input type="file" accept=".glb,.gltf" className="hidden" ref={inputRef} onChange={handleUpload} disabled={isUploading} />
+        <input 
+          type="file" 
+          accept=".glb,.gltf,.bin,image/*" 
+          className="hidden" 
+          ref={inputRef} 
+          onChange={handleUpload} 
+          disabled={isUploading}
+          webkitdirectory=""
+          directory=""
+          multiple 
+        />
+
       </DialogContent>
     </Dialog>
   )
