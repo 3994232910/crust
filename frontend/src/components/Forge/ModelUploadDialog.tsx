@@ -268,8 +268,7 @@ export function ModelUploadDialog({
           ref={inputRef} 
           onChange={handleUpload} 
           disabled={isUploading}
-          webkitdirectory=""
-          directory=""
+          {...({ webkitdirectory: "", directory: "" } as any)}
           multiple 
         />
 
