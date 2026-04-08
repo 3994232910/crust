@@ -4,6 +4,7 @@ import base64
 from typing import Any
 from pathlib import Path
 import shutil
+import asyncio
 
 import requests
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Body
@@ -12,11 +13,14 @@ from sqlmodel import Session, select, SQLModel
 from app.api.deps import CurrentUser, SessionDep
 from app.models.forge import Forge, ForgeCreate, ForgePublic, ForgesPublic, ForgeUpdate
 from app.models import Message
+from app.core.config import settings
 
 router = APIRouter(prefix="/forge", tags=["forge"])
 
-DASHSCOPE_API_KEY = "YOUR_DASHSCOPE_API_KEY_HERE"
+DASHSCOPE_API_KEY = settings.DASHSCOPE_API_KEY
 DASHSCOPE_API_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
+HUNYUAN3D_API_KEY = settings.HUNYUAN3D_API_KEY
+HUNYUAN3D_API_URL = "https://api.hypereal.cloud/v1/hunyuan3d/image-to-3d"
 
 
 class ModelInfo(SQLModel):
@@ -48,6 +52,95 @@ class LightAdjustWithScreenshotRequest(SQLModel):
     feedback: str
     currentConfig: dict | None = None
     screenshot: str | None = None
+
+
+class ImageTo3DRequest(SQLModel):
+    image_base64: str | None = None
+    image_url: str | None = None
+    texture: bool = True
+    octree_resolution: int = 256
+    num_inference_steps: int = 5
+    guidance_scale: float = 5.0
+
+
+@router.post("/image-to-3d", response_model=dict)
+async def image_to_3d(
+    *,
+    current_user: CurrentUser,
+    request: ImageTo3DRequest,
+) -> Any:
+    """Convert image to 3D model using Hunyuan3D 2.5 API."""
+    
+    if not HUNYUAN3D_API_KEY or HUNYUAN3D_API_KEY == "YOUR_HUNYUAN3D_API_KEY_HERE":
+        raise HTTPException(status_code=500, detail="Hunyuan3D API key not configured")
+    
+    if not request.image_base64 and not request.image_url:
+        raise HTTPException(status_code=400, detail="Either image_base64 or image_url is required")
+    
+    try:
+        payload = {
+            "texture": request.texture,
+            "octree_resolution": request.octree_resolution,
+            "num_inference_steps": request.num_inference_steps,
+            "guidance_scale": request.guidance_scale
+        }
+        
+        if request.image_base64:
+            payload["image"] = request.image_base64
+        elif request.image_url:
+            payload["image_url"] = request.image_url
+        
+        response = requests.post(
+            HUNYUAN3D_API_URL,
+            headers={
+                "Authorization": f"Bearer {HUNYUAN3D_API_KEY}",
+                "Content-Type": "application/json"
+            },
+            json=payload,
+            timeout=300
+        )
+        
+        if response.status_code != 200:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Hunyuan3D API call failed: {response.text}"
+            )
+        
+        result = response.json()
+        
+        models_dir = Path("models") / str(current_user.id)
+        models_dir.mkdir(parents=True, exist_ok=True)
+        
+        task_id = str(uuid.uuid4())
+        model_filename = f"{task_id}_model.glb"
+        model_path = models_dir / model_filename
+        
+        if "model_base64" in result:
+            model_data = base64.b64decode(result["model_base64"])
+            with open(model_path, "wb") as f:
+                f.write(model_data)
+        elif "model_url" in result:
+            model_response = requests.get(result["model_url"], timeout=60)
+            if model_response.status_code == 200:
+                with open(model_path, "wb") as f:
+                    f.write(model_response.content)
+            else:
+                raise HTTPException(status_code=502, detail="Failed to download 3D model")
+        else:
+            raise HTTPException(status_code=500, detail="Invalid response from Hunyuan3D API")
+        
+        model_url = f"/models/{current_user.id}/{model_filename}"
+        
+        return {
+            "model_url": model_url,
+            "filename": model_filename,
+            "message": "3D model generated successfully"
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating 3D model: {str(e)}")
 
 
 # 1. 基础路由
@@ -433,7 +526,7 @@ def parse_light_config(ai_response: str) -> dict:
         return {}
 
 
-@router.post('/ai-auto-optimize-light', response_model=dict)
+@router.post("/ai-auto-optimize-light", response_model=dict)
 async def ai_auto_optimize_light(
     *,
     current_user: CurrentUser,
@@ -449,6 +542,14 @@ async def ai_auto_optimize_light(
     }
 
     iteration = request.iteration
+
+    if not DASHSCOPE_API_KEY or DASHSCOPE_API_KEY == "YOUR_DASHSCOPE_API_KEY_HERE":
+        return {
+            'config': current,
+            'iteration': iteration,
+            'shouldContinue': False,
+            'message': '通义千问 API Key 未配置，使用默认光照'
+        }
 
     messages = [
         {
@@ -503,9 +604,14 @@ async def ai_auto_optimize_light(
     new_config = parse_light_config(ai_response)
 
     if not new_config:
-        raise HTTPException(status_code=500, detail='AI 返回的配置格式错误')
+        return {
+            'config': current,
+            'iteration': iteration,
+            'shouldContinue': False,
+            'message': 'AI 解析失败，保持当前配置'
+        }
 
-    should_continue = iteration < 3
+    should_continue = iteration < 1
 
     return {
         'config': new_config,
@@ -531,6 +637,9 @@ async def ai_adjust_light_with_screenshot(
     }
 
     feedback = request.feedback
+
+    if not DASHSCOPE_API_KEY or DASHSCOPE_API_KEY == "YOUR_DASHSCOPE_API_KEY_HERE":
+        return {'config': current, 'message': '通义千问 API Key 未配置，保持当前光照'}
 
     messages = [
         {
@@ -577,6 +686,6 @@ async def ai_adjust_light_with_screenshot(
     new_config = parse_light_config(ai_response)
 
     if not new_config:
-        raise HTTPException(status_code=500, detail='AI 返回的配置格式错误')
+        return {'config': current, 'message': 'AI 解析失败，保持当前配置'}
 
     return {'config': new_config, 'message': 'AI 已根据反馈调整光照'}
