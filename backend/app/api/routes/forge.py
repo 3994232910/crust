@@ -6,21 +6,42 @@ from pathlib import Path
 import shutil
 import asyncio
 
-import requests
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Body
+from fastapi.responses import StreamingResponse
 from sqlmodel import Session, select, SQLModel
 
 from app.api.deps import CurrentUser, SessionDep
 from app.models.forge import Forge, ForgeCreate, ForgePublic, ForgesPublic, ForgeUpdate
 from app.models import Message
-from app.core.config import settings
+from app.core.ai_client import ChatMessage, ChatRequest, ai_client
+from app.workflows.outline import outline_graph
+from app.workflows.summarize import summarize_graph
+
+
+def _build_embed_text(forge: Forge) -> str:
+    """拼接用于向量化的文本：标题 + 正文。"""
+    parts = []
+    if forge.title:
+        parts.append(forge.title)
+    if forge.content:
+        parts.append(forge.content)
+    return "\n".join(parts)
+
+
+async def _refresh_embedding(forge: Forge, session: SessionDep) -> None:
+    """生成并写入 embedding，失败时静默跳过，不影响主流程。"""
+    text = _build_embed_text(forge)
+    if not text.strip():
+        return
+    try:
+        vectors = await ai_client.embed([text])
+        forge.embedding = vectors[0]
+        session.add(forge)
+        session.commit()
+    except Exception:
+        pass  # embedding 失败不阻断 CRUD
 
 router = APIRouter(prefix="/forge", tags=["forge"])
-
-DASHSCOPE_API_KEY = settings.DASHSCOPE_API_KEY
-DASHSCOPE_API_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
-HUNYUAN3D_API_KEY = settings.HUNYUAN3D_API_KEY
-HUNYUAN3D_API_URL = "https://api.hypereal.cloud/v1/hunyuan3d/image-to-3d"
 
 
 class ModelInfo(SQLModel):
@@ -54,6 +75,18 @@ class LightAdjustWithScreenshotRequest(SQLModel):
     screenshot: str | None = None
 
 
+class SummarizeRequest(SQLModel):
+    forge_ids: list[uuid.UUID]
+    focus: str | None = None
+
+class CompleteRequest(SQLModel):
+    text: str
+    instruction: str | None = None
+
+class AnnotateRequest(SQLModel):
+    screenshot: str  # base64 data URL 或 http URL
+
+
 class ImageTo3DRequest(SQLModel):
     image_base64: str | None = None
     image_url: str | None = None
@@ -69,78 +102,17 @@ async def image_to_3d(
     current_user: CurrentUser,
     request: ImageTo3DRequest,
 ) -> Any:
-    """Convert image to 3D model using Hunyuan3D 2.5 API."""
-    
-    if not HUNYUAN3D_API_KEY or HUNYUAN3D_API_KEY == "YOUR_HUNYUAN3D_API_KEY_HERE":
-        raise HTTPException(status_code=500, detail="Hunyuan3D API key not configured")
-    
+    """图片转 3D 模型（Mock：直接返回假数据，不调用 Hunyuan3D API）。"""
     if not request.image_base64 and not request.image_url:
         raise HTTPException(status_code=400, detail="Either image_base64 or image_url is required")
-    
-    try:
-        payload = {
-            "texture": request.texture,
-            "octree_resolution": request.octree_resolution,
-            "num_inference_steps": request.num_inference_steps,
-            "guidance_scale": request.guidance_scale
-        }
-        
-        if request.image_base64:
-            payload["image"] = request.image_base64
-        elif request.image_url:
-            payload["image_url"] = request.image_url
-        
-        response = requests.post(
-            HUNYUAN3D_API_URL,
-            headers={
-                "Authorization": f"Bearer {HUNYUAN3D_API_KEY}",
-                "Content-Type": "application/json"
-            },
-            json=payload,
-            timeout=300
-        )
-        
-        if response.status_code != 200:
-            raise HTTPException(
-                status_code=502,
-                detail=f"Hunyuan3D API call failed: {response.text}"
-            )
-        
-        result = response.json()
-        
-        models_dir = Path("models") / str(current_user.id)
-        models_dir.mkdir(parents=True, exist_ok=True)
-        
-        task_id = str(uuid.uuid4())
-        model_filename = f"{task_id}_model.glb"
-        model_path = models_dir / model_filename
-        
-        if "model_base64" in result:
-            model_data = base64.b64decode(result["model_base64"])
-            with open(model_path, "wb") as f:
-                f.write(model_data)
-        elif "model_url" in result:
-            model_response = requests.get(result["model_url"], timeout=60)
-            if model_response.status_code == 200:
-                with open(model_path, "wb") as f:
-                    f.write(model_response.content)
-            else:
-                raise HTTPException(status_code=502, detail="Failed to download 3D model")
-        else:
-            raise HTTPException(status_code=500, detail="Invalid response from Hunyuan3D API")
-        
-        model_url = f"/models/{current_user.id}/{model_filename}"
-        
-        return {
-            "model_url": model_url,
-            "filename": model_filename,
-            "message": "3D model generated successfully"
-        }
-    
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error generating 3D model: {str(e)}")
+
+    mock_filename = f"{uuid.uuid4()}_mock_model.glb"
+    mock_url = f"/models/{current_user.id}/{mock_filename}"
+    return {
+        "model_url": mock_url,
+        "filename": mock_filename,
+        "message": "Mock: 3D model generated successfully (no real API call)",
+    }
 
 
 # 1. 基础路由
@@ -161,7 +133,7 @@ def read_forges(
 
 
 @router.post("/", response_model=ForgePublic)
-def create_forge(
+async def create_forge(
     *,
     session: SessionDep,
     forge_in: ForgeCreate,
@@ -170,11 +142,8 @@ def create_forge(
     """
     Create new forge.
     """
-    # If no title provided and it's a folder, use default folder name
     if forge_in.is_folder and not forge_in.title:
         forge_in.title = "nebula"
-
-    # If no title provided and it's a file, use default file name
     if not forge_in.is_folder and not forge_in.title:
         forge_in.title = "nova"
 
@@ -189,9 +158,48 @@ def create_forge(
     session.add(forge)
     session.commit()
     session.refresh(forge)
+
+    if not forge_in.is_folder:
+        await _refresh_embedding(forge, session)
+        session.refresh(forge)
+
     return forge
 
-# 2. 模型路由（必须放在 /{id} 之前！）
+# 2. AI 工作流路由（静态路径，必须在 /{id} 之前）
+
+@router.post("/summarize", response_model=dict)
+async def summarize_forges(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    request: SummarizeRequest,
+) -> Any:
+    """对多篇笔记进行知识梳理，返回结构化总结报告（LangGraph 工作流）。"""
+    forges = session.exec(
+        select(Forge).where(
+            Forge.id.in_(request.forge_ids),  # type: ignore[attr-defined]
+            Forge.owner_id == current_user.id,
+        )
+    ).all()
+
+    if not forges:
+        raise HTTPException(status_code=404, detail="未找到指定笔记")
+
+    forge_contents = [
+        {"title": f.title or "", "content": f.content or ""}
+        for f in forges
+    ]
+
+    result = await summarize_graph.ainvoke({
+        "forge_contents": forge_contents,
+        "focus": request.focus or "",
+        "summary": "",
+    })
+
+    return {"summary": result["summary"], "count": len(forges)}
+
+
+# 3. 模型路由（必须放在 /{id} 之前！）
 @router.post("/upload-model", response_model=dict)
 async def upload_model(
     *,
@@ -297,7 +305,7 @@ def read_forge(
 
 
 @router.put("/{id}", response_model=ForgePublic)
-def update_forge(
+async def update_forge(
     *,
     session: SessionDep,
     id: uuid.UUID,
@@ -314,10 +322,16 @@ def update_forge(
         raise HTTPException(status_code=403, detail="Not enough permissions")
 
     update_data = forge_in.model_dump(exclude_unset=True)
+    content_changed = "title" in update_data or "content" in update_data
     forge.sqlmodel_update(update_data)
     session.add(forge)
     session.commit()
     session.refresh(forge)
+
+    if content_changed and not forge.is_folder:
+        await _refresh_embedding(forge, session)
+        session.refresh(forge)
+
     return forge
 
 
@@ -339,6 +353,158 @@ def delete_forge(
     session.delete(forge)
     session.commit()
     return Message(message="Forge deleted successfully")
+
+
+@router.get("/{id}/recommend", response_model=list[ForgePublic])
+async def recommend_forges(
+    *,
+    session: SessionDep,
+    id: uuid.UUID,
+    current_user: CurrentUser,
+    limit: int = 5,
+) -> Any:
+    """基于向量相似度推荐关联笔记。"""
+    forge = session.get(Forge, id)
+    if not forge:
+        raise HTTPException(status_code=404, detail="Forge not found")
+    if forge.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+
+    # 没有 embedding 则先生成
+    if forge.embedding is None:
+        await _refresh_embedding(forge, session)
+        session.refresh(forge)
+
+    if forge.embedding is None:
+        return []
+
+    results = session.exec(
+        select(Forge)
+        .where(Forge.owner_id == current_user.id)
+        .where(Forge.id != id)
+        .where(Forge.embedding.is_not(None))  # type: ignore[union-attr]
+        .where(Forge.is_folder == False)  # noqa: E712
+        .order_by(Forge.embedding.op("<=>")(forge.embedding))  # type: ignore[union-attr]
+        .limit(limit)
+    ).all()
+
+    return results
+
+
+@router.post("/{id}/embed", response_model=dict)
+async def reembed_forge(
+    *,
+    session: SessionDep,
+    id: uuid.UUID,
+    current_user: CurrentUser,
+) -> Any:
+    """手动触发单个笔记的 embedding 生成（用于存量数据补全）。"""
+    forge = session.get(Forge, id)
+    if not forge:
+        raise HTTPException(status_code=404, detail="Forge not found")
+    if forge.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+
+    await _refresh_embedding(forge, session)
+    return {"message": "Embedding 已更新"}
+
+
+@router.post("/{id}/outline", response_model=dict)
+async def generate_outline(
+    *,
+    session: SessionDep,
+    id: uuid.UUID,
+    current_user: CurrentUser,
+) -> Any:
+    """为笔记生成结构化大纲（LangGraph 工作流）。"""
+    forge = session.get(Forge, id)
+    if not forge:
+        raise HTTPException(status_code=404, detail="Forge not found")
+    if forge.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+    if forge.is_folder:
+        raise HTTPException(status_code=400, detail="文件夹无法生成大纲")
+
+    result = await outline_graph.ainvoke({
+        "title": forge.title or "",
+        "content": forge.content or "",
+        "outline": "",
+    })
+
+    return {"outline": result["outline"]}
+
+
+@router.post("/{id}/annotate-3d", response_model=dict)
+async def annotate_3d_asset(
+    *,
+    session: SessionDep,
+    id: uuid.UUID,
+    current_user: CurrentUser,
+    request: AnnotateRequest,
+) -> Any:
+    """对 3D 资产截图进行自动标注，返回标签和描述。"""
+    forge = session.get(Forge, id)
+    if not forge:
+        raise HTTPException(status_code=404, detail="Forge not found")
+    if forge.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+
+    prompt = (
+        "请分析这个 3D 模型的截图，输出 JSON 格式，包含：\n"
+        '{"tags": ["标签1", "标签2", ...], "description": "简短描述", "category": "模型类别", "style": "风格特征"}\n'
+        "只返回 JSON，不加其他文字。"
+    )
+
+    try:
+        ai_response = await ai_client.analyze_image(request.screenshot, prompt)
+    except HTTPException:
+        raise HTTPException(status_code=502, detail="AI 标注失败")
+
+    # 尝试解析 JSON，失败则返回原始文本
+    try:
+        annotation = json.loads(ai_response.strip().strip("```json").strip("```").strip())
+    except json.JSONDecodeError:
+        annotation = {"raw": ai_response}
+
+    return {"annotation": annotation, "forge_id": str(id)}
+
+
+@router.post("/{id}/complete")
+async def complete_text(
+    *,
+    session: SessionDep,
+    id: uuid.UUID,
+    current_user: CurrentUser,
+    request: CompleteRequest,
+) -> StreamingResponse:
+    """流式文案补全 / 代码优化，返回 SSE 事件流。"""
+    forge = session.get(Forge, id)
+    if not forge:
+        raise HTTPException(status_code=404, detail="Forge not found")
+    if forge.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+
+    instruction = request.instruction or "请续写或优化以下内容，保持原有风格和语气。"
+    context = f"笔记标题：{forge.title or '无标题'}\n\n{instruction}\n\n---\n\n{request.text}"
+
+    messages = [
+        ChatMessage(
+            role="system",
+            content="你是专业的写作助手，擅长续写、优化和扩展文本内容。直接输出结果，不加解释。",
+        ),
+        ChatMessage(role="user", content=context),
+    ]
+
+    async def event_stream():
+        try:
+            async for token in ai_client.chat_stream(ChatRequest(messages=messages)):
+                yield f"data: {json.dumps({'token': token}, ensure_ascii=False)}\n\n"
+        except Exception:
+            yield f"data: {json.dumps({'error': 'AI 生成失败'})}\n\n"
+        finally:
+            yield "data: [DONE]\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
 @router.post("/ai-optimize-light", response_model=dict)
@@ -447,32 +613,6 @@ async def ai_adjust_light(
 
     return {"config": config, "message": "AI 已根据您的反馈调整光照"}
 
-def call_dashscope(messages: list[dict]) -> str:
-    """调用通义千问 API."""
-    response = requests.post(
-        DASHSCOPE_API_URL,
-        headers={
-            "Authorization": f"Bearer {DASHSCOPE_API_KEY}",
-            "Content-Type": "application/json"
-        },
-        json={
-            "model": "qwen-vl-max",
-            "messages": messages,
-            "temperature": 0.3,
-            "max_tokens": 2000
-        },
-        timeout=30
-    )
-
-    if response.status_code != 200:
-        raise HTTPException(
-            status_code=502,
-            detail=f"AI API 调用失败: {response.text}"
-        )
-
-    result = response.json()
-    return result['choices'][0]['message']['content']
-
 def parse_light_config(ai_response: str) -> dict:
     """解析 AI 返回的光照配置."""
     try:
@@ -543,18 +683,7 @@ async def ai_auto_optimize_light(
 
     iteration = request.iteration
 
-    if not DASHSCOPE_API_KEY or DASHSCOPE_API_KEY == "YOUR_DASHSCOPE_API_KEY_HERE":
-        return {
-            'config': current,
-            'iteration': iteration,
-            'shouldContinue': False,
-            'message': '通义千问 API Key 未配置，使用默认光照'
-        }
-
-    messages = [
-        {
-            'role': 'system',
-            'content': '''你是一个专业的 3D 渲染光照优化专家。你的任务是分析 3D 模型的渲染画面，自动调整光照参数以达到最佳视觉效果。
+    prompt = f"""你是一个专业的 3D 渲染光照优化专家。你的任务是分析 3D 模型的渲染画面，自动调整光照参数以达到最佳视觉效果。
 
 请分析画面中的以下问题并优化：
 1. 整体亮度是否合适（太暗或太亮）
@@ -564,42 +693,38 @@ async def ai_auto_optimize_light(
 5. 模型细节是否清晰可见
 6. 材质表现是否良好
 
-返回 JSON 格式的优化配置：
-{
+这是第 {iteration} 次光照优化迭代。
+
+当前光照配置：
+{json.dumps(current, ensure_ascii=False)}
+
+只返回 JSON 格式的优化配置，不要其他文字：
+{{
   "ambient": 环境光强度 (0.1-2.0),
-  "hemisphere": {
+  "hemisphere": {{
     "skyColor": "天空颜色 hex",
-    "groundColor": "地面颜色 hex", 
+    "groundColor": "地面颜色 hex",
     "intensity": 半球光强度 (0.1-1.5)
-  },
+  }},
   "directional": [
-    {
+    {{
       "position": [x, y, z],
       "intensity": 强度 (0.1-3.0),
       "color": "颜色 hex"
-    }
+    }}
   ],
   "environment": "环境贴图预设 (studio/city/park/dawn/dusk/night)"
-}'''
-        },
-        {
-            'role': 'user',
-            'content': [
-                {
-                    'type': 'image_url',
-                    'image_url': {
-                        'url': request.screenshot
-                    }
-                },
-                {
-                    'type': 'text',
-                    'text': f'这是第 {iteration} 次光照优化迭代。\n\n当前光照配置：\n{json.dumps(current, ensure_ascii=False)}\n\n请分析画面效果，给出优化后的光照配置。'
-                }
-            ]
-        }
-    ]
+}}"""
 
-    ai_response = call_dashscope(messages)
+    try:
+        ai_response = await ai_client.analyze_image(request.screenshot, prompt)
+    except HTTPException:
+        return {
+            'config': current,
+            'iteration': iteration,
+            'shouldContinue': False,
+            'message': 'AI 调用失败，保持当前配置'
+        }
 
     new_config = parse_light_config(ai_response)
 
@@ -638,50 +763,40 @@ async def ai_adjust_light_with_screenshot(
 
     feedback = request.feedback
 
-    if not DASHSCOPE_API_KEY or DASHSCOPE_API_KEY == "YOUR_DASHSCOPE_API_KEY_HERE":
-        return {'config': current, 'message': '通义千问 API Key 未配置，保持当前光照'}
+    prompt = f"""你是一个专业的 3D 渲染光照优化专家。根据用户的自然语言反馈，调整 3D 场景的光照配置。
 
-    messages = [
-        {
-            'role': 'system',
-            'content': '''你是一个专业的 3D 渲染光照优化专家。根据用户的自然语言反馈，调整 3D 场景的光照配置。
+用户反馈：{feedback}
 
-返回 JSON 格式的光照配置：
-{
+当前配置：
+{json.dumps(current, ensure_ascii=False)}
+
+只返回 JSON 格式的光照配置，不要其他文字：
+{{
   "ambient": 环境光强度 (0.1-2.0),
-  "hemisphere": {
+  "hemisphere": {{
     "skyColor": "天空颜色 hex",
     "groundColor": "地面颜色 hex",
     "intensity": 半球光强度 (0.1-1.5)
-  },
+  }},
   "directional": [
-    {
+    {{
       "position": [x, y, z],
       "intensity": 强度 (0.1-3.0),
       "color": "颜色 hex"
-    }
+    }}
   ],
   "environment": "环境贴图预设 (studio/city/park/dawn/dusk/night)"
-}'''
-        }
-    ]
+}}"""
 
-    user_content = [
-        {
-            'type': 'text',
-            'text': f'用户反馈：{feedback}\n\n当前配置：\n{json.dumps(current, ensure_ascii=False)}'
-        }
-    ]
-
-    if request.screenshot:
-        user_content.insert(0, {
-            'type': 'image_url',
-            'image_url': {'url': request.screenshot}
-        })
-
-    messages.append({'role': 'user', 'content': user_content})
-
-    ai_response = call_dashscope(messages)
+    try:
+        if request.screenshot:
+            ai_response = await ai_client.analyze_image(request.screenshot, prompt)
+        else:
+            ai_response = await ai_client.chat(
+                ChatRequest(messages=[ChatMessage(role="user", content=prompt)])
+            )
+    except HTTPException:
+        return {'config': current, 'message': 'AI 调用失败，保持当前配置'}
 
     new_config = parse_light_config(ai_response)
 
