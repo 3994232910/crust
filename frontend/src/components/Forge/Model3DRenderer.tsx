@@ -190,7 +190,7 @@ function useAILightOptimization() {
         })
       })
 
-      if (!response.ok) throw new Error('AI adjustment failed')
+      if (!response.ok)  throw new Error('AI adjustment failed')
 
       const data = await response.json()
       if (data.config) {
