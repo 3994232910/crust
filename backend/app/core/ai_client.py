@@ -1,10 +1,15 @@
 """AI 客户端 — 基于 LiteLLM 实现。
 
-支持 OpenAI 和 DeepSeek 系列模型，通过环境变量配置。
+支持任意 LiteLLM 兼容的模型，通过环境变量配置。
 自动处理模型路由、流式输出和向量化。
 当未配置 API Key 时，自动回退到 Mock 模式。
+
+配置方式：
+    AI_MODEL_TEXT=openai/gpt-4o-mini
+    AI_MODEL_VISION=openai/gpt-4o
+    AI_MODEL_EMBEDDING=openai/text-embedding-3-small
+    AI_MODEL_TEXT_API_KEY=sk-xxx  # 可选，默认从 PROVIDER_API_KEY 读取
 """
-import os
 import asyncio
 import random
 from typing import AsyncIterator
@@ -12,7 +17,7 @@ from typing import AsyncIterator
 from litellm import acompletion, aembedding
 from pydantic import BaseModel
 
-from app.core.config import settings
+from app.core.config import settings, AIModelConfig
 
 
 class ChatMessage(BaseModel):
@@ -22,101 +27,61 @@ class ChatMessage(BaseModel):
 
 class ChatRequest(BaseModel):
     messages: list[ChatMessage]
-    model: str | None = None
-    temperature: float = 0.3
-    max_tokens: int | None = 2000
+    model: str | None = None  # 可选，覆盖默认模型
+    temperature: float | None = None
+    max_tokens: int | None = None
 
-
-# 模型映射配置
-MODEL_MAPPINGS = {
-    "openai": {
-        "chat": "openai/{model}",
-        "embedding": "openai/{model}",
-    },
-    "deepseek": {
-        "chat": "deepseek/{model}",
-        "embedding": "deepseek/{model}",
-    },
-}
-
-# 默认模型配置
-DEFAULT_MODELS = {
-    "openai": {
-        "chat": "gpt-4o-mini",
-        "embedding": "text-embedding-3-small",
-    },
-    "deepseek": {
-        "chat": "deepseek-chat",
-        "embedding": "deepseek-embedding",
-    },
-}
 
 # Mock 响应（当未配置 API Key 时使用）
 _MOCK_CHAT_RESPONSES = [
-    "这是一段模拟的 AI 回复内容。请在 .env 文件中配置 OPENAI_API_KEY 或 DEEPSEEK_API_KEY 以使用真实 AI 功能。",
-    "Mock 响应：AI 功能尚未配置。请设置环境变量：OPENAI_API_KEY=sk-xxx 或 DEEPSEEK_API_KEY=sk-xxx",
+    "这是一段模拟的 AI 回复内容。请在 .env 文件中配置 AI_MODEL_TEXT_API_KEY 或相应的 PROVIDER_API_KEY 以使用真实 AI 功能。",
+    "Mock 响应：AI 功能尚未配置。请设置环境变量，如 OPENAI_API_KEY=sk-xxx 或 DEEPSEEK_API_KEY=sk-xxx",
     "（Mock 模式）根据您提供的内容，以下是生成的回复示例：\n\n- 要点一：示例内容\n- 要点二：Mock 数据\n- 要点三：请先配置 API Key",
 ]
-
-
-# Embedding 维度配置
-EMBEDDING_DIM = 1536  # OpenAI text-embedding-3-small 默认维度
-
-
-def _get_api_key(provider: str) -> str | None:
-    """获取指定提供商的 API Key。"""
-    if provider == "openai":
-        return settings.OPENAI_API_KEY or os.getenv("OPENAI_API_KEY")
-    elif provider == "deepseek":
-        return settings.DEEPSEEK_API_KEY or os.getenv("DEEPSEEK_API_KEY")
-    return None
-
-
-def _has_api_key() -> bool:
-    """检查是否配置了任意一个 API Key。"""
-    return bool(settings.OPENAI_API_KEY or settings.DEEPSEEK_API_KEY or
-                os.getenv("OPENAI_API_KEY") or os.getenv("DEEPSEEK_API_KEY"))
-
-
-def _resolve_model(model: str | None, task: str = "chat") -> str:
-    """解析并返回完整的模型标识符。
-
-    Args:
-        model: 用户指定的模型名称，如 "gpt-4o", "deepseek-chat"
-        task: 任务类型，"chat" 或 "embedding"
-
-    Returns:
-        LiteLLM 格式的完整模型标识符，如 "openai/gpt-4o"
-    """
-    provider = settings.AI_PROVIDER
-
-    # 如果未指定模型，使用默认配置
-    if not model:
-        model = DEFAULT_MODELS[provider][task]
-
-    # 如果模型已经包含提供商前缀，直接返回
-    if "/" in model:
-        return model
-
-    # 根据模型名称自动判断提供商
-    if model.startswith("gpt-") or model.startswith("text-embedding-"):
-        provider = "openai"
-    elif model.startswith("deepseek-"):
-        provider = "deepseek"
-
-    # 构建完整的模型标识符
-    mapping = MODEL_MAPPINGS[provider][task]
-    return mapping.format(model=model)
 
 
 class AIClient:
     """基于 LiteLLM 的统一 AI 客户端。
 
+    支持职能分离的模型配置：
+    - 文本模型：对话、总结、大纲生成
+    - 视觉模型：图像分析、3D 标注
+    - Embedding 模型：文本向量化
+
     当未配置 API Key 时，自动回退到 Mock 模式。
     """
 
+    def __init__(self):
+        self._text_config = settings.get_text_model_config()
+        self._vision_config = settings.get_vision_model_config()
+        self._embedding_config = settings.get_embedding_model_config()
+
+    def _has_api_key(self, config: AIModelConfig) -> bool:
+        """检查指定配置是否有可用的 API Key。"""
+        return bool(config.get_api_key())
+
+    def _resolve_model(
+        self,
+        req: ChatRequest,
+        default_config: AIModelConfig,
+    ) -> tuple[str, str | None]:
+        """解析模型名称和 API Key。
+
+        Args:
+            req: 对话请求
+            default_config: 默认模型配置
+
+        Returns:
+            (模型名称, API Key)
+        """
+        # 优先使用请求中指定的模型
+        model = req.model or default_config.model
+        # API Key 使用配置的 key
+        api_key = default_config.get_api_key()
+        return model, api_key
+
     async def chat(self, req: ChatRequest) -> str:
-        """非流式对话。
+        """非流式对话（使用文本模型）。
 
         Args:
             req: 对话请求，包含消息列表、模型、温度等参数
@@ -124,24 +89,26 @@ class AIClient:
         Returns:
             AI 生成的回复文本
         """
-        if not _has_api_key():
+        if not self._has_api_key(self._text_config):
             await asyncio.sleep(0.05)
             return random.choice(_MOCK_CHAT_RESPONSES)
 
-        model = _resolve_model(req.model, task="chat")
+        model, api_key = self._resolve_model(req, self._text_config)
+        temperature = req.temperature if req.temperature is not None else settings.AI_DEFAULT_TEMPERATURE
+        max_tokens = req.max_tokens if req.max_tokens is not None else settings.AI_DEFAULT_MAX_TOKENS
 
         response = await acompletion(
             model=model,
             messages=[m.model_dump() for m in req.messages],
-            temperature=req.temperature,
-            max_tokens=req.max_tokens,
-            api_key=_get_api_key(settings.AI_PROVIDER),
+            temperature=temperature,
+            max_tokens=max_tokens,
+            api_key=api_key,
         )
 
         return response.choices[0].message.content or ""
 
     async def chat_stream(self, req: ChatRequest) -> AsyncIterator[str]:
-        """流式对话，逐 token 返回。
+        """流式对话，逐 token 返回（使用文本模型）。
 
         Args:
             req: 对话请求
@@ -149,21 +116,23 @@ class AIClient:
         Yields:
             每个 token 字符串
         """
-        if not _has_api_key():
+        if not self._has_api_key(self._text_config):
             mock_text = "这是流式 Mock 输出。请在 .env 文件中配置 API Key 以使用真实 AI 功能。"
             for char in mock_text:
                 await asyncio.sleep(0.02)
                 yield char
             return
 
-        model = _resolve_model(req.model, task="chat")
+        model, api_key = self._resolve_model(req, self._text_config)
+        temperature = req.temperature if req.temperature is not None else settings.AI_DEFAULT_TEMPERATURE
+        max_tokens = req.max_tokens if req.max_tokens is not None else settings.AI_DEFAULT_MAX_TOKENS
 
         response = await acompletion(
             model=model,
             messages=[m.model_dump() for m in req.messages],
-            temperature=req.temperature,
-            max_tokens=req.max_tokens,
-            api_key=_get_api_key(settings.AI_PROVIDER),
+            temperature=temperature,
+            max_tokens=max_tokens,
+            api_key=api_key,
             stream=True,
         )
 
@@ -173,26 +142,37 @@ class AIClient:
                 yield content
 
     async def embed(self, texts: list[str], model: str | None = None) -> list[list[float]]:
-        """文本向量化。
+        """文本向量化（使用 Embedding 模型）。
 
         Args:
             texts: 需要向量化的文本列表
-            model: 指定的 embedding 模型
+            model: 指定的 embedding 模型，可选
 
         Returns:
             向量列表，每个向量对应一个输入文本
         """
-        if not _has_api_key():
+        if not self._has_api_key(self._embedding_config):
             await asyncio.sleep(0.02)
-            # 返回 Mock 向量（使用固定随机种子保证一致性）
-            return [[0.01 * ((i + j) % 100 - 50) for j in range(EMBEDDING_DIM)] for i in range(len(texts))]
+            dim = settings.AI_EMBEDDING_DIM
+            # 返回 Mock 向量（基于文本内容生成伪随机但稳定的向量）
+            import hashlib
+            vectors = []
+            for text in texts:
+                hash_obj = hashlib.md5(text.encode())
+                seed = int(hash_obj.hexdigest(), 16)
+                random.seed(seed)
+                vector = [random.uniform(-0.5, 0.5) for _ in range(dim)]
+                vectors.append(vector)
+            random.seed()  # 重置随机种子
+            return vectors
 
-        resolved_model = _resolve_model(model or settings.AI_EMBEDDING_MODEL, task="embedding")
+        resolved_model = model or self._embedding_config.model
+        api_key = self._embedding_config.get_api_key()
 
         response = await aembedding(
             model=resolved_model,
             input=texts,
-            api_key=_get_api_key(settings.AI_PROVIDER),
+            api_key=api_key,
         )
 
         return [item["embedding"] for item in response.data]
@@ -209,7 +189,7 @@ class AIClient:
         """
         import json
 
-        if not _has_api_key():
+        if not self._has_api_key(self._vision_config):
             await asyncio.sleep(0.05)
             if "光照" in prompt or "light" in prompt.lower():
                 return json.dumps({
@@ -230,9 +210,8 @@ class AIClient:
                 }, ensure_ascii=False)
             return random.choice(_MOCK_CHAT_RESPONSES)
 
-        # 图像分析默认使用支持视觉的模型
-        vision_model = "gpt-4o" if settings.AI_PROVIDER == "openai" else "deepseek-chat"
-        model = _resolve_model(vision_model, task="chat")
+        model = self._vision_config.model
+        api_key = self._vision_config.get_api_key()
 
         messages = [
             {
@@ -249,7 +228,7 @@ class AIClient:
             messages=messages,
             temperature=0.3,
             max_tokens=2000,
-            api_key=_get_api_key(settings.AI_PROVIDER),
+            api_key=api_key,
         )
 
         return response.choices[0].message.content or ""
