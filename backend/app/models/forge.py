@@ -4,10 +4,13 @@ from sqlalchemy import Column
 from sqlmodel import SQLModel, Field, Relationship
 from pgvector.sqlalchemy import Vector
 
+from app.core.config import settings
+
 if TYPE_CHECKING:
     from app.models.user import User
 
-EMBEDDING_DIM = 1536  # OpenAI text-embedding-3-small / DeepSeek 默认维度
+# 从配置读取 embedding 维度，支持不同模型
+EMBEDDING_DIM = settings.AI_EMBEDDING_DIM
 
 class ForgeBase(SQLModel):
     title: str | None = None
