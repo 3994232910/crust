@@ -45,3 +45,14 @@ if settings.all_cors_origins:
         allow_headers=["*"],
     )
 app.include_router(api_router, prefix=settings.API_V1_STR)
+
+from fastapi.middleware.cors import CORSMiddleware
+
+# 👇 必须加在 app = FastAPI() 下面
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # 允许所有来源（开发环境用）
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)

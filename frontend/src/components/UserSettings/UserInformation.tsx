@@ -1,12 +1,10 @@
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { useState, useRef } from "react"
+import { Camera, X } from "lucide-react"
+import { useRef, useState } from "react"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
-import { Camera, X } from "lucide-react"
-
-import { UsersService, type UserUpdateMe } from "@/client"
-import { OpenAPI } from "@/client"
+import { OpenAPI, UsersService, type UserUpdateMe } from "@/client"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import {
@@ -22,8 +20,7 @@ import { LoadingButton } from "@/components/ui/loading-button"
 import useAuth from "@/hooks/useAuth"
 import useCustomToast from "@/hooks/useCustomToast"
 import { cn } from "@/lib/utils"
-import { handleError } from "@/utils"
-import { getInitials } from "@/utils"
+import { getInitials, handleError } from "@/utils"
 
 const formSchema = z.object({
   full_name: z.string().max(30).optional(),
@@ -90,23 +87,23 @@ const UserInformation = () => {
   const uploadAvatarMutation = useMutation({
     mutationFn: async (file: File) => {
       const formData = new FormData()
-      formData.append('file', file, file.name)
-      
+      formData.append("file", file, file.name)
+
       // 直接使用 fetch 调用 API，绕过 SDK
-      const token = localStorage.getItem('access_token')
+      const token = localStorage.getItem("access_token")
       const response = await fetch(`${OpenAPI.BASE}/api/v1/users/me/avatar`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Authorization': `Bearer ${token}`
+          Authorization: `Bearer ${token}`,
         },
-        body: formData
+        body: formData,
       })
-      
+
       if (!response.ok) {
         const error = await response.json()
-        throw new Error(error.detail || 'Upload failed')
+        throw new Error(error.detail || "Upload failed")
       }
-      
+
       return response.json()
     },
     onSuccess: () => {
@@ -134,22 +131,22 @@ const UserInformation = () => {
     const file = event.target.files?.[0]
     if (file) {
       // Validate file type
-      if (!file.type.startsWith('image/')) {
+      if (!file.type.startsWith("image/")) {
         showErrorToast("Please select an image file")
         return
       }
-      
+
       // Validate file size (5MB)
       if (file.size > 5 * 1024 * 1024) {
         showErrorToast("File size must be less than 5MB")
         return
       }
-      
+
       uploadAvatarMutation.mutate(file)
     }
     // Reset input value to allow selecting the same file again
     if (fileInputRef.current) {
-      fileInputRef.current.value = ''
+      fileInputRef.current.value = ""
     }
   }
 
@@ -171,8 +168,8 @@ const UserInformation = () => {
               <Avatar className="size-20">
                 {currentUser?.avatar_url ? (
                   <>
-                    <AvatarImage 
-                      src={`${OpenAPI.BASE}${currentUser.avatar_url}`} 
+                    <AvatarImage
+                      src={`${OpenAPI.BASE}${currentUser.avatar_url}`}
                       alt={currentUser.full_name || "Avatar"}
                     />
                     <AvatarFallback className="bg-zinc-600 text-white text-xl">

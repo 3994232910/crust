@@ -1,19 +1,18 @@
-import { useState, useEffect } from "react"
-import { 
-  FileText, 
-  FolderPlus, 
-  Plus, 
-  Search, 
-  ChevronRight, 
+import {
   ChevronDown,
+  ChevronRight,
+  FileText,
   Folder,
-  X,
+  FolderPlus,
+  Plus,
+  Search,
+  Telescope,
   Trash2,
-  Telescope
+  X,
 } from "lucide-react"
-
+import { useEffect, useState } from "react"
+import { type ForgePublic, ForgeService, type ForgesPublic } from "@/client"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import {
   Dialog,
   DialogContent,
@@ -22,12 +21,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import useToast from "@/hooks/useCustomToast"
-import { ForgeService, type ForgesPublic, type ForgePublic } from "@/client"
-import StarGazingView from './StarGazingView'
+import StarGazingView from "./StarGazingView"
 
-interface Forge extends Omit<ForgePublic, 'content' | 'is_folder'> {
+interface Forge extends Omit<ForgePublic, "content" | "is_folder"> {
   content?: string
   is_folder?: boolean
 }
@@ -46,8 +45,37 @@ export function ForgeList() {
   const [sidebarWidth, setSidebarWidth] = useState(256)
   const [isResizing, setIsResizing] = useState(false)
   const [showStarGazing, setShowStarGazing] = useState(false)
-  
+
   const toast = useToast()
+
+  const autoSave = async () => {
+    if (!selectedForge) return
+
+    try {
+      await ForgeService.updateForge({
+        id: selectedForge.id,
+        requestBody: {
+          title: editTitle || selectedForge.title,
+          content:
+            editContent !== selectedForge.content ? editContent : undefined,
+        },
+      })
+
+      const updatedForge = {
+        ...selectedForge,
+        title: editTitle || selectedForge.title,
+        content: editContent || "",
+        updated_at: new Date().toISOString(),
+      } as Forge
+
+      setForges((prev) =>
+        prev.map((f) => (f.id === selectedForge.id ? updatedForge : f)),
+      )
+      setSelectedForge(updatedForge)
+    } catch (error) {
+      console.error("Auto-save failed:", error)
+    }
+  }
 
   // Auto-save implementation
   useEffect(() => {
@@ -60,40 +88,12 @@ export function ForgeList() {
     }, 2000) // 2 seconds debounce
 
     return () => clearTimeout(timer)
-  }, [editTitle, editContent, selectedForge])
-
-  const autoSave = async () => {
-    if (!selectedForge) return
-    
-    try {
-      await ForgeService.updateForge({
-        id: selectedForge.id,
-        requestBody: {
-          title: editTitle || selectedForge.title,
-          content: editContent !== selectedForge.content ? editContent : undefined,
-        },
-      })
-      
-      const updatedForge = {
-        ...selectedForge,
-        title: editTitle || selectedForge.title,
-        content: editContent || "",
-        updated_at: new Date().toISOString(),
-      } as Forge
-
-      setForges(prev => prev.map(f => 
-        f.id === selectedForge.id ? updatedForge : f
-      ))
-      setSelectedForge(updatedForge)
-    } catch (error) {
-      console.error("Auto-save failed:", error)
-    }
-  }
+  }, [editTitle, editContent, selectedForge, autoSave])
 
   // Ctrl+S handler
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
         e.preventDefault()
         if (selectedForge) {
           autoSave()
@@ -102,14 +102,9 @@ export function ForgeList() {
       }
     }
 
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [selectedForge, editTitle, editContent])
-
-  // Load forges on mount
-  useEffect(() => {
-    loadForges()
-  }, [])
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [selectedForge, autoSave, toast.showSuccessToast])
 
   const loadForges = async () => {
     try {
@@ -125,10 +120,17 @@ export function ForgeList() {
       }
     } catch (error: any) {
       console.error("Failed to load forges:", error)
-      console.error("Error details:", error?.response?.data || error?.message || error)
-      toast.showErrorToast("无法连接到服务器，请检查后端是否运行")
+      console.error(
+        "Error details:",
+        error?.response?.data || error?.message || error,
+      )
     }
   }
+
+  // Load forges on mount
+  useEffect(() => {
+    loadForges()
+  }, [loadForges])
 
   const handleCreateNew = () => {
     setIsCreatingFolder(false)
@@ -146,22 +148,23 @@ export function ForgeList() {
 
   const handleSubmitCreate = async () => {
     try {
-      const titleToUse = newTitle.trim() || (isCreatingFolder ? "nebula" : "nova")
-      
+      const titleToUse =
+        newTitle.trim() || (isCreatingFolder ? "nebula" : "nova")
+
       const requestData = {
         title: titleToUse,
         content: newContent || "",
         is_folder: isCreatingFolder,
       }
-      
+
       console.log("Creating forge with data:", requestData)
-      
+
       const response = await ForgeService.createForge({
         requestBody: requestData,
       })
       console.log("Created forge response:", response)
       const newForge = response as any as Forge
-      
+
       setForges([...forges, newForge])
       if (!isCreatingFolder) {
         setSelectedForge(newForge)
@@ -171,14 +174,14 @@ export function ForgeList() {
       setIsCreateDialogOpen(false)
       setNewTitle("")
       setNewContent("")
-      
+
       toast.showSuccessToast(`${isCreatingFolder ? "Folder" : "Note"} created`)
     } catch (error: any) {
       console.error("Failed to create forge:", error)
       console.error("Error response:", error?.response)
       console.error("Error data:", error?.response?.data)
       console.error("Error status:", error?.response?.status)
-      
+
       let errorMessage = "创建失败"
       if (error?.response?.data?.detail) {
         const detail = error.response.data.detail
@@ -190,7 +193,7 @@ export function ForgeList() {
       } else if (error?.message) {
         errorMessage = error.message
       }
-      
+
       toast.showErrorToast(errorMessage)
     }
   }
@@ -205,32 +208,41 @@ export function ForgeList() {
     }
   }
 
-  const handleCreateFileInFolder = async (folderId: string, name: string, isFolder: boolean = false) => {
+  const handleCreateFileInFolder = async (
+    folderId: string,
+    name: string,
+    isFolder: boolean = false,
+  ) => {
     try {
       // Check for duplicate names in the same parent folder
-      const existingInFolder = forges.filter(f => 
-        f.parent_id === folderId && 
-        f.title.toLowerCase() === name.toLowerCase().trim()
+      const existingInFolder = forges.filter(
+        (f) =>
+          f.parent_id === folderId &&
+          f.title.toLowerCase() === name.toLowerCase().trim(),
       )
-      
+
       let finalName = name.trim()
-      
+
       // If duplicate found, add number suffix with parentheses
       if (existingInFolder.length > 0) {
         const baseName = finalName
         let counter = 1
-        
+
         // Keep incrementing until we find a unique name
-        while (forges.some(f => 
-          f.parent_id === folderId && 
-          f.title.toLowerCase() === `${baseName} (${counter})`.toLowerCase()
-        )) {
+        while (
+          forges.some(
+            (f) =>
+              f.parent_id === folderId &&
+              f.title.toLowerCase() ===
+                `${baseName} (${counter})`.toLowerCase(),
+          )
+        ) {
           counter++
         }
-        
+
         finalName = `${baseName} (${counter})`
       }
-      
+
       const response = await ForgeService.createForge({
         requestBody: {
           title: finalName || (isFolder ? "nebula" : "nova"),
@@ -240,17 +252,17 @@ export function ForgeList() {
         },
       })
       const newForge = response as any as Forge
-      
+
       // Add to forges array
-      setForges(prev => [...prev, newForge])
-      
+      setForges((prev) => [...prev, newForge])
+
       // Select the new item if it's a file
       if (!isFolder) {
         setSelectedForge(newForge)
         setEditTitle(newForge.title || "")
         setEditContent(newForge.content || "")
       }
-      
+
       toast.showSuccessToast(isFolder ? "Folder created" : "File created")
     } catch (error: any) {
       console.error("Failed to create:", error)
@@ -269,12 +281,12 @@ export function ForgeList() {
   const handleDeleteForge = async (id: string) => {
     try {
       await ForgeService.deleteForge({ id })
-      
-      setForges(forges.filter(f => f.id !== id))
+
+      setForges(forges.filter((f) => f.id !== id))
       if (selectedForge?.id === id) {
         setSelectedForge(null)
       }
-      
+
       toast.showSuccessToast("Forge deleted")
     } catch (error) {
       console.error("Failed to delete forge:", error)
@@ -289,7 +301,7 @@ export function ForgeList() {
 
   const handleMouseMove = (e: MouseEvent) => {
     if (!isResizing) return
-    
+
     const newWidth = e.clientX
     if (newWidth >= 200 && newWidth <= 600) {
       setSidebarWidth(newWidth)
@@ -302,51 +314,78 @@ export function ForgeList() {
 
   useEffect(() => {
     if (isResizing) {
-      document.addEventListener('mousemove', handleMouseMove)
-      document.addEventListener('mouseup', handleMouseUp)
+      document.addEventListener("mousemove", handleMouseMove)
+      document.addEventListener("mouseup", handleMouseUp)
       return () => {
-        document.removeEventListener('mousemove', handleMouseMove)
-        document.removeEventListener('mouseup', handleMouseUp)
+        document.removeEventListener("mousemove", handleMouseMove)
+        document.removeEventListener("mouseup", handleMouseUp)
       }
     }
-  }, [isResizing])
+  }, [isResizing, handleMouseMove, handleMouseUp])
 
   const filteredForges = forges.filter((forge) =>
-    forge.title.toLowerCase().includes(searchTerm.toLowerCase())
+    forge.title.toLowerCase().includes(searchTerm.toLowerCase()),
   )
 
-  const rootForges = filteredForges.filter(f => !f.parent_id)
+  const rootForges = filteredForges.filter((f) => !f.parent_id)
 
   return (
     <div className="flex flex-col h-full">
       {/* 顶部工具栏 */}
       <div className="flex items-center justify-between p-4 border-b">
         <div className="flex items-center gap-2">
-          <Button 
-            variant="ghost" 
+          <Button
+            variant="ghost"
             size="icon"
             onClick={() => setShowStarGazing(true)}
             title="Star Gazing View"
           >
             <Telescope className="h-5 w-5" />
           </Button>
-          <Button variant="ghost" size="icon" onClick={handleCreateNew} title="New Note" className="h-8 w-8">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleCreateNew}
+            title="New Note"
+            className="h-8 w-8"
+          >
             <Plus className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="icon" onClick={handleCreateFolder} title="New Folder" className="h-8 w-8">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleCreateFolder}
+            title="New Folder"
+            className="h-8 w-8"
+          >
             <FolderPlus className="h-4 w-4" />
           </Button>
         </div>
       </div>
-      
+
       {/* Sidebar - File Tree */}
-      <div style={{ width: sidebarWidth, minWidth: sidebarWidth }} className="pr-4">
+      <div
+        style={{ width: sidebarWidth, minWidth: sidebarWidth }}
+        className="pr-4"
+      >
         <div className="mb-4">
           <div className="flex gap-1 mb-2">
-            <Button variant="ghost" size="icon" onClick={handleCreateNew} title="New Note" className="h-8 w-8">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleCreateNew}
+              title="New Note"
+              className="h-8 w-8"
+            >
               <Plus className="h-4 w-4" />
             </Button>
-            <Button variant="ghost" size="icon" onClick={handleCreateFolder} title="New Folder" className="h-8 w-8">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleCreateFolder}
+              title="New Folder"
+              className="h-8 w-8"
+            >
               <FolderPlus className="h-4 w-4" />
             </Button>
           </div>
@@ -379,9 +418,9 @@ export function ForgeList() {
       {/* Resizer - positioned on the border */}
       <div
         className={`w-px cursor-col-resize transition-colors ${
-          isResizing ? 'bg-primary' : 'bg-border'
+          isResizing ? "bg-primary" : "bg-border"
         }`}
-        style={{ marginRight: '-1px' }}
+        style={{ marginRight: "-1px" }}
         onMouseDown={handleMouseDown}
       />
 
@@ -400,7 +439,11 @@ export function ForgeList() {
                 />
               </div>
               <div className="flex gap-2">
-                <Button variant="ghost" size="icon" onClick={() => handleDeleteForge(selectedForge.id)}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => handleDeleteForge(selectedForge.id)}
+                >
                   <Trash2 className="h-4 w-4 text-destructive" />
                 </Button>
               </div>
@@ -419,10 +462,12 @@ export function ForgeList() {
             {/* Status Bar */}
             <div className="mt-4 pt-4 border-t text-xs text-muted-foreground flex justify-between">
               <span>
-                {editContent.split(/\s+/).filter(w => w.length > 0).length} words
+                {editContent.split(/\s+/).filter((w) => w.length > 0).length}{" "}
+                words
               </span>
               <span>
-                Last updated: {new Date(selectedForge.updated_at).toLocaleString()}
+                Last updated:{" "}
+                {new Date(selectedForge.updated_at).toLocaleString()}
               </span>
             </div>
           </>
@@ -445,7 +490,7 @@ export function ForgeList() {
               Create New {isCreatingFolder ? "Folder" : "Note"}
             </DialogTitle>
             <DialogDescription>
-              Create a new {isCreatingFolder ? "folder" : "note"} in your Forge. 
+              Create a new {isCreatingFolder ? "folder" : "note"} in your Forge.
               Leave title empty to use default name.
             </DialogDescription>
           </DialogHeader>
@@ -474,16 +519,17 @@ export function ForgeList() {
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setIsCreateDialogOpen(false)}
+            >
               Cancel
             </Button>
-            <Button onClick={handleSubmitCreate}>
-              Create
-            </Button>
+            <Button onClick={handleSubmitCreate}>Create</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      
+
       {/* 星球视图 */}
       {showStarGazing && (
         <StarGazingView onClose={() => setShowStarGazing(false)} />
@@ -503,13 +549,21 @@ interface TreeItemProps {
   depth?: number
 }
 
-function TreeItem({ forge, allForges, selectedFolderId, onSelect, onDelete, onCreateFile, depth = 0 }: TreeItemProps) {
+function TreeItem({
+  forge,
+  allForges,
+  selectedFolderId,
+  onSelect,
+  onDelete,
+  onCreateFile,
+  depth = 0,
+}: TreeItemProps) {
   const [isExpanded, setIsExpanded] = useState(true)
   const [isCreatingFile, setIsCreatingFile] = useState(false)
   const [isCreatingFolder, setIsCreatingFolder] = useState(false)
   const [newFileName, setNewFileName] = useState("")
   const [newFolderName, setNewFolderName] = useState("")
-  const children = allForges.filter(f => f.parent_id === forge.id)
+  const children = allForges.filter((f) => f.parent_id === forge.id)
   const hasChildren = children.length > 0
 
   const handleClick = () => {
@@ -542,7 +596,7 @@ function TreeItem({ forge, allForges, selectedFolderId, onSelect, onDelete, onCr
   const handleFileSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newFileName.trim()) return
-    
+
     await onCreateFile(forge.id, newFileName.trim(), false)
     setIsCreatingFile(false)
     setNewFileName("")
@@ -551,7 +605,7 @@ function TreeItem({ forge, allForges, selectedFolderId, onSelect, onDelete, onCr
   const handleFolderSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newFolderName.trim()) return
-    
+
     await onCreateFile(forge.id, newFolderName.trim(), true)
     setIsCreatingFolder(false)
     setNewFolderName("")
@@ -562,8 +616,8 @@ function TreeItem({ forge, allForges, selectedFolderId, onSelect, onDelete, onCr
       <div
         className={`flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer group text-sm ${
           forge.is_folder && selectedFolderId === forge.id
-            ? 'bg-accent'
-            : 'hover:bg-accent'
+            ? "bg-accent"
+            : "hover:bg-accent"
         }`}
         style={{ marginLeft: `${depth * 16}px` }}
         onClick={handleClick}
@@ -581,15 +635,15 @@ function TreeItem({ forge, allForges, selectedFolderId, onSelect, onDelete, onCr
         ) : (
           <div className="w-4" />
         )}
-        
+
         {forge.is_folder ? (
           <Folder className="h-4 w-4 text-primary" />
         ) : (
           <FileText className="h-4 w-4 text-muted-foreground" />
         )}
-        
+
         <span className="flex-1 truncate">{forge.title}</span>
-        
+
         {forge.is_folder && (
           <>
             <Button
@@ -624,11 +678,10 @@ function TreeItem({ forge, allForges, selectedFolderId, onSelect, onDelete, onCr
           </>
         )}
       </div>
-      
+
       {forge.is_folder && isCreatingFile && (
         <form onSubmit={handleFileSubmit} className="ml-6 mt-1">
           <input
-            autoFocus
             type="text"
             value={newFileName}
             onChange={(e) => setNewFileName(e.target.value)}
@@ -641,11 +694,10 @@ function TreeItem({ forge, allForges, selectedFolderId, onSelect, onDelete, onCr
           />
         </form>
       )}
-      
+
       {forge.is_folder && isCreatingFolder && (
         <form onSubmit={handleFolderSubmit} className="ml-6 mt-1">
           <input
-            autoFocus
             type="text"
             value={newFolderName}
             onChange={(e) => setNewFolderName(e.target.value)}
@@ -658,19 +710,21 @@ function TreeItem({ forge, allForges, selectedFolderId, onSelect, onDelete, onCr
           />
         </form>
       )}
-      
-      {forge.is_folder && isExpanded && children.map(child => (
-        <TreeItem
-          key={child.id}
-          forge={child}
-          selectedFolderId={selectedFolderId}
-          allForges={allForges}
-          onSelect={onSelect}
-          onDelete={onDelete}
-          onCreateFile={onCreateFile}
-          depth={depth + 1}
-        />
-      ))}
+
+      {forge.is_folder &&
+        isExpanded &&
+        children.map((child) => (
+          <TreeItem
+            key={child.id}
+            forge={child}
+            selectedFolderId={selectedFolderId}
+            allForges={allForges}
+            onSelect={onSelect}
+            onDelete={onDelete}
+            onCreateFile={onCreateFile}
+            depth={depth + 1}
+          />
+        ))}
     </div>
   )
 }
