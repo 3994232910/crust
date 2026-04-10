@@ -7,7 +7,7 @@ from pgvector.sqlalchemy import Vector
 if TYPE_CHECKING:
     from app.models.user import User
 
-EMBEDDING_DIM = 1024  # DashScope text-embedding-v3 默认维度，LiteLLM 接管后可统一调整
+EMBEDDING_DIM = 1536  # OpenAI text-embedding-3-small / DeepSeek 默认维度
 
 class ForgeBase(SQLModel):
     title: str | None = None

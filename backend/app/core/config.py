@@ -95,9 +95,16 @@ class Settings(BaseSettings):
     FIRST_SUPERUSER: EmailStr
     FIRST_SUPERUSER_PASSWORD: str
 
-    # AI APIs
+    # AI APIs (Legacy - kept for compatibility)
     HUNYUAN3D_API_KEY: str = ""
     DASHSCOPE_API_KEY: str = ""
+
+    # LiteLLM Configuration
+    OPENAI_API_KEY: str | None = None
+    DEEPSEEK_API_KEY: str | None = None
+    AI_PROVIDER: Literal["openai", "deepseek"] = "openai"
+    AI_DEFAULT_MODEL: str = "gpt-4o-mini"
+    AI_EMBEDDING_MODEL: str = "text-embedding-3-small"
 
     def _check_default_secret(self, var_name: str, value: str | None) -> None:
         if value == "changethis":
