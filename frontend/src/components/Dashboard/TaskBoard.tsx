@@ -8,7 +8,7 @@ interface TaskBoardProps {
 
 const priorityStyles: Record<DashboardTask['priority'], string> = {
   low: 'bg-slate-700 text-slate-200',
-  medium: 'bg-sky-700 text-sky-100',
+  medium: 'bg-teal-700 text-teal-100',
   high: 'bg-rose-600 text-rose-100',
 }
 

@@ -15,25 +15,25 @@ const stageNames = {
 
 export function EvolutionStageBadge({ stage, progress, nextUnlock, readyForUpgrade }: EvolutionStageBadgeProps) {
   return (
-    <div className="bg-panel border border-border rounded-2xl p-4 backdrop-blur-sm shadow-sm shadow-slate-900/5">
+    <div className="bg-panel border border-border rounded-lg p-4">
       <div className="flex items-center justify-between mb-3 gap-3">
         <div>
-          <div className="text-xs uppercase tracking-[0.2em] text-text-secondary">Stage {stage === 'hadean' ? '1' : stage === 'archean' ? '2' : '3'}</div>
-          <div className="text-lg font-semibold text-text-primary">{stageNames[stage]}</div>
+          <div className="text-xs text-text-secondary">Stage {stage === 'hadean' ? '1' : stage === 'archean' ? '2' : '3'}</div>
+          <div className="text-base font-semibold text-text-primary">{stageNames[stage]}</div>
         </div>
-        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${readyForUpgrade ? 'bg-success/15 text-success' : 'bg-panel-hover text-text-secondary'}`}>
-          {readyForUpgrade ? '可升级' : '继续沉积'}
+        <span className={`rounded px-2 py-0.5 text-xs font-medium ${readyForUpgrade ? 'bg-success/10 text-success' : 'bg-panel-hover text-text-secondary'}`}>
+          {readyForUpgrade ? '可升级' : '进行中'}
         </span>
       </div>
-      <div className="mb-3">
-        <div className="w-full bg-panel-hover rounded-full h-2">
+      <div className="mb-2">
+        <div className="w-full bg-panel-hover rounded-full h-1.5">
           <div
-            className="bg-accent h-2 rounded-full transition-all duration-500"
+            className="bg-accent h-1.5 rounded-full transition-all duration-300"
             style={{ width: `${progress}%` }}
           />
         </div>
       </div>
-      <p className="text-xs text-text-secondary">下一阶段要求：{nextUnlock}</p>
+      <p className="text-xs text-text-secondary">{nextUnlock}</p>
     </div>
   )
 }

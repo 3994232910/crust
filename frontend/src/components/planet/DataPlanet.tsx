@@ -46,7 +46,7 @@ function OrbitRings({ stage }: { stage: EvolutionStage }) {
       {Array.from({ length: ringCount }, (_, i) => (
         <mesh key={i} rotation={[Math.PI / 2, 0, 0]}>
           <ringGeometry args={[3 + i * 0.5, 3.2 + i * 0.5, 64]} />
-          <meshBasicMaterial color="#0ea5e9" transparent opacity={0.3} />
+          <meshBasicMaterial color="#009688" transparent opacity={0.3} />
         </mesh>
       ))}
     </>
@@ -83,7 +83,7 @@ function ParticleField() {
           args={[particles, 3]}
         />
       </bufferGeometry>
-      <pointsMaterial size={0.02} color="#0ea5e9" transparent opacity={0.6} />
+      <pointsMaterial size={0.02} color="#009688" transparent opacity={0.6} />
     </points>
   )
 }

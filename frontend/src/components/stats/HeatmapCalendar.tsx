@@ -26,50 +26,42 @@ export function HeatmapCalendar({ data }: HeatmapCalendarProps) {
   }, [data])
 
   const getStyle = (count: number) => {
-    if (count === 0) return { className: 'bg-panel-hover', size: 8 }
-    if (count <= 1) return { className: 'bg-accent-weak', size: 8 }
-    if (count <= 3) return { className: 'bg-accent/80', size: 10 }
-    return { className: 'bg-accent', size: 12 }
+    if (count === 0) return 'bg-muted'
+    if (count <= 1) return 'bg-chart-2/40'
+    if (count <= 3) return 'bg-chart-2/70'
+    return 'bg-chart-2'
   }
 
   return (
-    <div className="bg-panel border border-border rounded-2xl p-4 backdrop-blur-sm">
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h3 className="text-sm font-medium text-text-primary">Activity Heatmap</h3>
-          <p className="text-xs text-text-secondary">最近 90 天笔记与任务活跃度</p>
-        </div>
+    <div className="bg-panel border border-border rounded-lg p-4">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-xs font-medium text-text-primary">活跃热图</h3>
+        <span className="text-xs text-text-secondary">近 90 天</span>
       </div>
       <div className="flex gap-1">
         {weeks.map((week, weekIndex) => (
           <div key={weekIndex} className="flex flex-col gap-1">
             {week.map((day) => {
-              const style = getStyle(day.count)
+              const styleClass = getStyle(day.count)
               return (
                 <div
                   key={day.date}
-                  className={`rounded-sm ${style.className}`}
-                  style={{ width: style.size, height: style.size }}
-                  title={`${day.date}: ${day.count} activities`}
+                  className={`rounded-sm ${styleClass}`}
+                  style={{ width: 8, height: 8 }}
+                  title={`${day.date}: ${day.count}`}
                 />
               )
             })}
           </div>
         ))}
       </div>
-      <div className="mt-4 text-xs text-text-secondary space-y-1">
-        <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-panel-hover inline-block" />
-          <span>低活跃：笔记少</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-accent-weak inline-block" />
-          <span>中活跃：持续更新</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-accent/80 inline-block" />
-          <span>高活跃：知识连通</span>
-        </div>
+      <div className="mt-3 flex items-center gap-2 text-xs text-text-secondary">
+        <span>少</span>
+        <span className="w-2 h-2 rounded-sm bg-muted inline-block" />
+        <span className="w-2 h-2 rounded-sm bg-chart-2/40 inline-block" />
+        <span className="w-2 h-2 rounded-sm bg-chart-2/70 inline-block" />
+        <span className="w-2 h-2 rounded-sm bg-chart-2 inline-block" />
+        <span>多</span>
       </div>
     </div>
   )

@@ -176,14 +176,14 @@ export function DashboardPage() {
 
   if (error) {
     return (
-      <div className="flex items-center justify-center h-screen bg-background text-text-primary px-6">
-        <div className="rounded-xl border border-danger bg-panel p-8 text-center shadow-lg">
-          <h2 className="text-2xl font-semibold text-danger mb-3">无法加载仪表盘</h2>
-          <p className="mb-4 text-text-secondary">{error}</p>
+      <div className="flex items-center justify-center h-screen bg-background text-foreground px-6">
+        <div className="rounded-xl border border-destructive bg-card p-8 text-center shadow-lg">
+          <h2 className="text-2xl font-semibold text-destructive mb-3">无法加载仪表盘</h2>
+          <p className="mb-4 text-muted-foreground">{error}</p>
           <button
             type="button"
             onClick={refreshAll}
-            className="rounded-lg bg-accent px-5 py-2 text-sm font-semibold text-white transition hover:bg-accent/90"
+            className="rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
           >
             重新加载
           </button>
@@ -212,7 +212,6 @@ export function DashboardPage() {
         <DashboardHeader
           productName="Knowledge Core"
           currentStage={dashboardData.core.stage}
-          todaySummary={`今日笔记 ${logs.length} 条，能量 +${dashboardData.energy.today}`}
           isDarkMode={theme === 'dark'}
           onToggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
         />
@@ -243,7 +242,6 @@ export function DashboardPage() {
           tasks={dashboardData.todayTasks}
           onTaskToggle={handleToggleTask}
           busyTaskId={busyTaskId}
-          activities={dashboardData.activityFeed}
         />
       }
     />

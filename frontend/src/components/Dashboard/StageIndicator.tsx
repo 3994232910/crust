@@ -7,8 +7,8 @@ interface StageIndicatorProps {
 export function StageIndicator({ stage, progress, score }: StageIndicatorProps) {
   const stages = [
     { name: '冥古宙', key: 'hadean', color: 'from-red-600 to-orange-600', icon: '🌋' },
-    { name: '太古宙', key: 'archean', color: 'from-slate-600 to-blue-600', icon: '🌊' },
-    { name: '显生宙', key: 'phanerozoic', color: 'from-green-600 to-blue-600', icon: '🌍' },
+    { name: '太古宙', key: 'archean', color: 'from-slate-600 to-teal-600', icon: '🌊' },
+    { name: '显生宙', key: 'phanerozoic', color: 'from-green-600 to-teal-600', icon: '🌍' },
   ]
 
   const currentStageIndex = stages.findIndex((s) => s.key === stage)

@@ -14,7 +14,7 @@ export function CoreMetrics({ totalNotes, weeklyNew, tasksCompleted, storageUsed
       label: '总笔记数',
       value: totalNotes.toString(),
       change: `+${weeklyNew} 本周`,
-      color: 'text-blue-400',
+      color: 'text-teal-400',
     },
     {
       icon: TrendingUp,

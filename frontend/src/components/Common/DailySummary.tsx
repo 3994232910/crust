@@ -27,7 +27,7 @@ export function DailySummary({
             <p className="text-xs text-slate-500">新增笔记</p>
           </div>
           <div className="text-center">
-            <p className="text-2xl font-bold text-blue-400">{completedTasks}</p>
+            <p className="text-2xl font-bold text-teal-400">{completedTasks}</p>
             <p className="text-xs text-slate-500">完成任务</p>
           </div>
           <div className="text-center">
