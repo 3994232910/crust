@@ -13,9 +13,23 @@ from sqlmodel import Session, select, SQLModel
 from app.api.deps import CurrentUser, SessionDep
 from app.models.forge import Forge, ForgeCreate, ForgePublic, ForgesPublic, ForgeUpdate
 from app.models import Message
-from app.core.ai_client import ChatMessage, ChatRequest, ai_client
+from app.core.ai_client import ChatMessage, ChatRequest, ai_client, AIFeatureDisabledError
 from app.workflows.outline import outline_graph
 from app.workflows.summarize import summarize_graph
+
+
+def _handle_ai_error(e: Exception) -> None:
+    """统一处理 AI 相关异常。"""
+    if isinstance(e, AIFeatureDisabledError):
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "feature_disabled",
+                "feature": e.feature,
+                "message": e.message,
+            },
+        )
+    raise HTTPException(status_code=502, detail=f"AI 服务错误: {str(e)}")
 
 
 def _build_embed_text(forge: Forge) -> str:
@@ -38,6 +52,8 @@ async def _refresh_embedding(forge: Forge, session: SessionDep) -> None:
         forge.embedding = vectors[0]
         session.add(forge)
         session.commit()
+    except AIFeatureDisabledError:
+        pass  # 功能被禁用或未配置 API Key，静默跳过
     except Exception:
         pass  # embedding 失败不阻断 CRUD
 
@@ -190,11 +206,14 @@ async def summarize_forges(
         for f in forges
     ]
 
-    result = await summarize_graph.ainvoke({
-        "forge_contents": forge_contents,
-        "focus": request.focus or "",
-        "summary": "",
-    })
+    try:
+        result = await summarize_graph.ainvoke({
+            "forge_contents": forge_contents,
+            "focus": request.focus or "",
+            "summary": "",
+        })
+    except AIFeatureDisabledError as e:
+        _handle_ai_error(e)
 
     return {"summary": result["summary"], "count": len(forges)}
 
@@ -425,11 +444,14 @@ async def generate_outline(
     if forge.is_folder:
         raise HTTPException(status_code=400, detail="文件夹无法生成大纲")
 
-    result = await outline_graph.ainvoke({
-        "title": forge.title or "",
-        "content": forge.content or "",
-        "outline": "",
-    })
+    try:
+        result = await outline_graph.ainvoke({
+            "title": forge.title or "",
+            "content": forge.content or "",
+            "outline": "",
+        })
+    except AIFeatureDisabledError as e:
+        _handle_ai_error(e)
 
     return {"outline": result["outline"]}
 
@@ -457,6 +479,8 @@ async def annotate_3d_asset(
 
     try:
         ai_response = await ai_client.analyze_image(request.screenshot, prompt)
+    except AIFeatureDisabledError as e:
+        _handle_ai_error(e)
     except HTTPException:
         raise HTTPException(status_code=502, detail="AI 标注失败")
 
@@ -499,6 +523,13 @@ async def complete_text(
         try:
             async for token in ai_client.chat_stream(ChatRequest(messages=messages)):
                 yield f"data: {json.dumps({'token': token}, ensure_ascii=False)}\n\n"
+        except AIFeatureDisabledError as e:
+            error_data = {
+                "error": "feature_disabled",
+                "feature": e.feature,
+                "message": e.message,
+            }
+            yield f"data: {json.dumps(error_data)}\n\n"
         except Exception:
             yield f"data: {json.dumps({'error': 'AI 生成失败'})}\n\n"
         finally:
