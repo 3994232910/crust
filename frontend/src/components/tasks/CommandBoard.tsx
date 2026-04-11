@@ -16,7 +16,7 @@ interface CommandBoardProps {
 
 const priorityStyles = {
   low: 'border-slate-600 text-slate-400',
-  medium: 'border-blue-600 text-blue-400',
+  medium: 'border-teal-600 text-teal-400',
   high: 'border-red-600 text-red-400',
 }
 

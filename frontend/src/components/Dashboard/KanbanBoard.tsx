@@ -1,5 +1,3 @@
-import { Badge } from '@/components/ui/badge'
-
 interface KanbanBoardProps {
   data: {
     todo: Array<{ id: number; content: string; tag: string }>
@@ -8,26 +6,18 @@ interface KanbanBoardProps {
   }
 }
 
-const tagColors = {
-  study: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
-  plan: 'bg-green-500/20 text-green-300 border-green-500/30',
-  knowledge: 'bg-purple-500/20 text-purple-300 border-purple-500/30',
-  tool: 'bg-orange-500/20 text-orange-300 border-orange-500/30',
-}
-
-function KanbanColumn({ title, items, color }: { title: string; items: Array<{ id: number; content: string; tag: string }>; color: string }) {
+function KanbanColumn({ title, items, dotColor }: { title: string; items: Array<{ id: number; content: string; tag: string }>; dotColor: string }) {
   return (
-    <div className="flex-1 space-y-3">
-      <h4 className={`text-sm font-medium px-3 py-2 rounded-lg ${color}`}>
-        {title} ({items.length})
-      </h4>
-      <div className="space-y-2">
+    <div className="flex-1 space-y-2">
+      <div className="flex items-center gap-1.5 mb-2">
+        <span className={`w-1.5 h-1.5 rounded-full ${dotColor}`} />
+        <h4 className="text-xs font-medium text-text-secondary">{title} · {items.length}</h4>
+      </div>
+      <div className="space-y-1.5">
         {items.map((item) => (
-          <div key={item.id} className="p-3 bg-background/50 rounded-lg border border-border/30 hover:bg-background/70 transition-colors">
-            <p className="text-sm text-text-primary mb-2">{item.content}</p>
-            <Badge variant="outline" className={`text-xs ${tagColors[item.tag as keyof typeof tagColors] || 'bg-gray-500/20 text-gray-300 border-gray-500/30'}`}>
-              {item.tag}
-            </Badge>
+          <div key={item.id} className="p-2.5 bg-background/50 rounded border border-border hover:bg-panel-hover transition-colors">
+            <p className="text-xs text-text-primary">{item.content}</p>
+            <span className="text-[11px] text-text-secondary mt-1 inline-block">{item.tag}</span>
           </div>
         ))}
       </div>
@@ -37,24 +27,12 @@ function KanbanColumn({ title, items, color }: { title: string; items: Array<{ i
 
 export function KanbanBoard({ data }: KanbanBoardProps) {
   return (
-    <div className="space-y-4">
-      <h3 className="text-lg font-semibold text-text-primary">任务看板</h3>
-      <div className="flex gap-4 h-full">
-        <KanbanColumn
-          title="待办"
-          items={data.todo}
-          color="bg-red-500/20 text-red-300 border border-red-500/30"
-        />
-        <KanbanColumn
-          title="进行中"
-          items={data.processing}
-          color="bg-yellow-500/20 text-yellow-300 border border-yellow-500/30"
-        />
-        <KanbanColumn
-          title="已完成"
-          items={data.done}
-          color="bg-green-500/20 text-green-300 border border-green-500/30"
-        />
+    <div className="space-y-3">
+      <h3 className="text-sm font-medium text-text-primary">任务看板</h3>
+      <div className="flex gap-3 h-full">
+        <KanbanColumn title="待办" items={data.todo} dotColor="bg-danger" />
+        <KanbanColumn title="进行中" items={data.processing} dotColor="bg-accent" />
+        <KanbanColumn title="已完成" items={data.done} dotColor="bg-success" />
       </div>
     </div>
   )

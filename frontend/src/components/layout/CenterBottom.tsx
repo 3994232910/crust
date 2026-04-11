@@ -18,11 +18,11 @@ interface CenterBottomProps {
 
 export function CenterBottom({ weekPlan, kanban }: CenterBottomProps) {
   return (
-    <div className="h-full w-full grid grid-cols-2 gap-4 p-4">
-      <div className="bg-panel/50 rounded-lg border border-border/50 p-4">
+    <div className="h-full w-full grid grid-cols-2 gap-0 divide-x divide-border">
+      <div className="p-4">
         <WeekPlan data={weekPlan} />
       </div>
-      <div className="bg-panel/50 rounded-lg border border-border/50 p-4">
+      <div className="p-4">
         <KanbanBoard data={kanban} />
       </div>
     </div>

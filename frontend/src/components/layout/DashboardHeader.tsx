@@ -1,9 +1,8 @@
-import { Search, Settings, Sun, Moon } from 'lucide-react'
+import { Sun, Moon } from 'lucide-react'
 
 interface DashboardHeaderProps {
   productName: string
   currentStage: string
-  todaySummary: string
   isDarkMode: boolean
   onToggleTheme: () => void
 }
@@ -11,38 +10,24 @@ interface DashboardHeaderProps {
 export function DashboardHeader({
   productName,
   currentStage,
-  todaySummary,
   isDarkMode,
   onToggleTheme,
 }: DashboardHeaderProps) {
   return (
-    <header className="h-20 border-b border-border bg-panel/90 backdrop-blur-xl px-6 flex items-center justify-between shadow-sm shadow-slate-200/40">
-      <div className="flex flex-col justify-center gap-1">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold text-text-primary">{productName}</h1>
-          <span className="rounded-full bg-accent-weak px-3 py-1 text-xs font-semibold text-accent">数据星核仪表盘</span>
-        </div>
-        <div className="flex flex-wrap items-center gap-3 text-sm text-text-secondary">
-          <span className="inline-flex items-center gap-2 rounded-full bg-panel-hover px-3 py-1">{currentStage}</span>
-          <span>{todaySummary}</span>
-        </div>
+    <header className="h-14 border-b border-border bg-card px-6 flex items-center justify-between">
+      <div className="flex items-center gap-3">
+        <h1 className="text-base font-semibold text-foreground">{productName}</h1>
+        <span className="text-muted-foreground text-sm">·</span>
+        <span className="text-sm text-muted-foreground">{currentStage}</span>
       </div>
-
-      <div className="flex items-center gap-2">
-        <button type="button" className="p-2 rounded-lg hover:bg-panel-hover transition-colors">
-          <Search className="w-5 h-5" />
-        </button>
-        <button
-          type="button"
-          onClick={onToggleTheme}
-          className="p-2 rounded-lg hover:bg-panel-hover transition-colors"
-        >
-          {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-        </button>
-        <button type="button" className="p-2 rounded-lg hover:bg-panel-hover transition-colors">
-          <Settings className="w-5 h-5" />
-        </button>
-      </div>
+      <button
+        type="button"
+        onClick={onToggleTheme}
+        className="p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+        aria-label="切换主题"
+      >
+        {isDarkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+      </button>
     </header>
   )
 }
