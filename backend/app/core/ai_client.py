@@ -2,16 +2,27 @@
 
 支持任意 LiteLLM 兼容的模型，通过环境变量配置。
 自动处理模型路由、流式输出和向量化。
-当未配置 API Key 时，自动回退到 Mock 模式。
 
-配置方式：
+配置方式（API Key 必须在对应职能显式配置）：
     AI_MODEL_TEXT=openai/gpt-4o-mini
+    AI_MODEL_TEXT_API_KEY=sk-xxx  # 必须：为该职能单独配置的 API Key
+    AI_MODEL_TEXT_API_BASE=https://api.openai.com/v1  # 可选，自定义 API 基础 URL
+
     AI_MODEL_VISION=openai/gpt-4o
+    AI_MODEL_VISION_API_KEY=sk-xxx  # 必须：为该职能单独配置的 API Key
+
     AI_MODEL_EMBEDDING=openai/text-embedding-3-small
-    AI_MODEL_TEXT_API_KEY=sk-xxx  # 可选，默认从 PROVIDER_API_KEY 读取
+    AI_MODEL_EMBEDDING_API_KEY=sk-xxx  # 必须：为该职能单独配置的 API Key
+
+功能开关（.env 配置或运行时禁用）：
+    AI_ENABLE_CHAT=true|false      # 控制对话、总结、大纲、补全功能
+    AI_ENABLE_VISION=true|false    # 控制图像分析、3D 标注功能
+    AI_ENABLE_EMBEDDING=true|false # 控制向量化、相似度推荐功能
+
+注意：
+    当功能被显式禁用（AI_ENABLE_XXX=false）或 API Key 未配置时，
+    调用对应方法将抛出 AIFeatureDisabledError。
 """
-import asyncio
-import random
 from typing import AsyncIterator
 
 from litellm import acompletion, aembedding
@@ -32,12 +43,29 @@ class ChatRequest(BaseModel):
     max_tokens: int | None = None
 
 
-# Mock 响应（当未配置 API Key 时使用）
-_MOCK_CHAT_RESPONSES = [
-    "这是一段模拟的 AI 回复内容。请在 .env 文件中配置 AI_MODEL_TEXT_API_KEY 或相应的 PROVIDER_API_KEY 以使用真实 AI 功能。",
-    "Mock 响应：AI 功能尚未配置。请设置环境变量，如 OPENAI_API_KEY=sk-xxx 或 DEEPSEEK_API_KEY=sk-xxx",
-    "（Mock 模式）根据您提供的内容，以下是生成的回复示例：\n\n- 要点一：示例内容\n- 要点二：Mock 数据\n- 要点三：请先配置 API Key",
-]
+class AIFeatureDisabledError(Exception):
+    """AI 功能被禁用时的异常。
+
+    可能原因：
+    1. 管理员显式禁用了该功能（AI_ENABLE_XXX=false）
+    2. 未配置该职能的 API Key（AI_MODEL_XXX_API_KEY）
+
+    Attributes:
+        feature: 被禁用的功能名称
+        message: 错误消息
+    """
+
+    def __init__(self, feature: str, message: str | None = None):
+        self.feature = feature
+        self.message = message or f"AI {feature} 功能当前未开放"
+        super().__init__(self.message)
+
+    def to_dict(self) -> dict:
+        return {
+            "error": "feature_disabled",
+            "feature": self.feature,
+            "message": self.message,
+        }
 
 
 class AIClient:
@@ -48,7 +76,9 @@ class AIClient:
     - 视觉模型：图像分析、3D 标注
     - Embedding 模型：文本向量化
 
-    当未配置 API Key 时，自动回退到 Mock 模式。
+    功能禁用规则：
+    1. 若 AI_ENABLE_XXX=false，抛出 AIFeatureDisabledError
+    2. 若对应职能未配置 API Key，抛出 AIFeatureDisabledError
     """
 
     def __init__(self):
@@ -56,29 +86,49 @@ class AIClient:
         self._vision_config = settings.get_vision_model_config()
         self._embedding_config = settings.get_embedding_model_config()
 
-    def _has_api_key(self, config: AIModelConfig) -> bool:
-        """检查指定配置是否有可用的 API Key。"""
-        return bool(config.get_api_key())
+    def _check_feature_enabled(self, feature: str) -> None:
+        """检查功能是否已启用，否则抛出 AIFeatureDisabledError。"""
+        feature_map = {
+            "chat": settings.AI_ENABLE_CHAT,
+            "vision": settings.AI_ENABLE_VISION,
+            "embedding": settings.AI_ENABLE_EMBEDDING,
+        }
+        if not feature_map.get(feature, True):
+            raise AIFeatureDisabledError(
+                feature,
+                f"AI {feature} 功能已被管理员禁用"
+            )
+
+    def _check_api_key_configured(self, config: AIModelConfig, feature: str) -> None:
+        """检查 API Key 是否已配置，否则抛出 AIFeatureDisabledError。"""
+        if not config.get_api_key():
+            raise AIFeatureDisabledError(
+                feature,
+                f"AI {feature} 功能未配置 API Key，请联系管理员配置 AI_MODEL_{feature.upper()}_API_KEY"
+            )
 
     def _resolve_model(
         self,
         req: ChatRequest,
         default_config: AIModelConfig,
-    ) -> tuple[str, str | None]:
-        """解析模型名称和 API Key。
+    ) -> tuple[str, str, str | None]:
+        """解析模型名称、API Key 和 API Base。
 
         Args:
             req: 对话请求
             default_config: 默认模型配置
 
         Returns:
-            (模型名称, API Key)
+            (模型名称, API Key, API Base)
         """
         # 优先使用请求中指定的模型
         model = req.model or default_config.model
-        # API Key 使用配置的 key
+        # API Key 和 API Base 使用配置的 key
         api_key = default_config.get_api_key()
-        return model, api_key
+        api_base = default_config.api_base
+        # API Key 必须存在（由调用方保证）
+        assert api_key is not None, "API Key must be checked before calling _resolve_model"
+        return model, api_key, api_base
 
     async def chat(self, req: ChatRequest) -> str:
         """非流式对话（使用文本模型）。
@@ -88,22 +138,28 @@ class AIClient:
 
         Returns:
             AI 生成的回复文本
-        """
-        if not self._has_api_key(self._text_config):
-            await asyncio.sleep(0.05)
-            return random.choice(_MOCK_CHAT_RESPONSES)
 
-        model, api_key = self._resolve_model(req, self._text_config)
+        Raises:
+            AIFeatureDisabledError: 如果功能被禁用或 API Key 未配置
+        """
+        self._check_feature_enabled("chat")
+        self._check_api_key_configured(self._text_config, "chat")
+
+        model, api_key, api_base = self._resolve_model(req, self._text_config)
         temperature = req.temperature if req.temperature is not None else settings.AI_DEFAULT_TEMPERATURE
         max_tokens = req.max_tokens if req.max_tokens is not None else settings.AI_DEFAULT_MAX_TOKENS
 
-        response = await acompletion(
-            model=model,
-            messages=[m.model_dump() for m in req.messages],
-            temperature=temperature,
-            max_tokens=max_tokens,
-            api_key=api_key,
-        )
+        kwargs = {
+            "model": model,
+            "messages": [m.model_dump() for m in req.messages],
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "api_key": api_key,
+        }
+        if api_base:
+            kwargs["api_base"] = api_base
+
+        response = await acompletion(**kwargs)
 
         return response.choices[0].message.content or ""
 
@@ -115,26 +171,29 @@ class AIClient:
 
         Yields:
             每个 token 字符串
-        """
-        if not self._has_api_key(self._text_config):
-            mock_text = "这是流式 Mock 输出。请在 .env 文件中配置 API Key 以使用真实 AI 功能。"
-            for char in mock_text:
-                await asyncio.sleep(0.02)
-                yield char
-            return
 
-        model, api_key = self._resolve_model(req, self._text_config)
+        Raises:
+            AIFeatureDisabledError: 如果功能被禁用或 API Key 未配置
+        """
+        self._check_feature_enabled("chat")
+        self._check_api_key_configured(self._text_config, "chat")
+
+        model, api_key, api_base = self._resolve_model(req, self._text_config)
         temperature = req.temperature if req.temperature is not None else settings.AI_DEFAULT_TEMPERATURE
         max_tokens = req.max_tokens if req.max_tokens is not None else settings.AI_DEFAULT_MAX_TOKENS
 
-        response = await acompletion(
-            model=model,
-            messages=[m.model_dump() for m in req.messages],
-            temperature=temperature,
-            max_tokens=max_tokens,
-            api_key=api_key,
-            stream=True,
-        )
+        kwargs = {
+            "model": model,
+            "messages": [m.model_dump() for m in req.messages],
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "api_key": api_key,
+            "stream": True,
+        }
+        if api_base:
+            kwargs["api_base"] = api_base
+
+        response = await acompletion(**kwargs)
 
         async for chunk in response:
             content = chunk.choices[0].delta.content
@@ -150,30 +209,26 @@ class AIClient:
 
         Returns:
             向量列表，每个向量对应一个输入文本
+
+        Raises:
+            AIFeatureDisabledError: 如果功能被禁用或 API Key 未配置
         """
-        if not self._has_api_key(self._embedding_config):
-            await asyncio.sleep(0.02)
-            dim = settings.AI_EMBEDDING_DIM
-            # 返回 Mock 向量（基于文本内容生成伪随机但稳定的向量）
-            import hashlib
-            vectors = []
-            for text in texts:
-                hash_obj = hashlib.md5(text.encode())
-                seed = int(hash_obj.hexdigest(), 16)
-                random.seed(seed)
-                vector = [random.uniform(-0.5, 0.5) for _ in range(dim)]
-                vectors.append(vector)
-            random.seed()  # 重置随机种子
-            return vectors
+        self._check_feature_enabled("embedding")
+        self._check_api_key_configured(self._embedding_config, "embedding")
 
         resolved_model = model or self._embedding_config.model
         api_key = self._embedding_config.get_api_key()
+        api_base = self._embedding_config.api_base
 
-        response = await aembedding(
-            model=resolved_model,
-            input=texts,
-            api_key=api_key,
-        )
+        kwargs = {
+            "model": resolved_model,
+            "input": texts,
+            "api_key": api_key,
+        }
+        if api_base:
+            kwargs["api_base"] = api_base
+
+        response = await aembedding(**kwargs)
 
         return [item["embedding"] for item in response.data]
 
@@ -186,32 +241,16 @@ class AIClient:
 
         Returns:
             AI 分析结果
-        """
-        import json
 
-        if not self._has_api_key(self._vision_config):
-            await asyncio.sleep(0.05)
-            if "光照" in prompt or "light" in prompt.lower():
-                return json.dumps({
-                    "ambient": 0.7,
-                    "hemisphere": {"skyColor": "#ffffff", "groundColor": "#555555", "intensity": 0.6},
-                    "directional": [
-                        {"position": [5, 10, 5], "intensity": 1.2, "color": "#ffffff"},
-                        {"position": [-5, 5, -5], "intensity": 0.6, "color": "#ffeedd"},
-                    ],
-                    "environment": "studio",
-                }, ensure_ascii=False)
-            if "标注" in prompt or "tag" in prompt.lower() or "annotate" in prompt.lower():
-                return json.dumps({
-                    "tags": ["3D模型", "Mock", "示例"],
-                    "description": "这是一个模拟标注结果，请配置 API Key 以使用真实视觉模型分析。",
-                    "category": "未知",
-                    "style": "写实",
-                }, ensure_ascii=False)
-            return random.choice(_MOCK_CHAT_RESPONSES)
+        Raises:
+            AIFeatureDisabledError: 如果功能被禁用或 API Key 未配置
+        """
+        self._check_feature_enabled("vision")
+        self._check_api_key_configured(self._vision_config, "vision")
 
         model = self._vision_config.model
         api_key = self._vision_config.get_api_key()
+        api_base = self._vision_config.api_base
 
         messages = [
             {
@@ -223,13 +262,17 @@ class AIClient:
             }
         ]
 
-        response = await acompletion(
-            model=model,
-            messages=messages,
-            temperature=0.3,
-            max_tokens=2000,
-            api_key=api_key,
-        )
+        kwargs = {
+            "model": model,
+            "messages": messages,
+            "temperature": 0.3,
+            "max_tokens": 2000,
+            "api_key": api_key,
+        }
+        if api_base:
+            kwargs["api_base"] = api_base
+
+        response = await acompletion(**kwargs)
 
         return response.choices[0].message.content or ""
 
