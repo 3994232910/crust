@@ -10,7 +10,6 @@ from pydantic import (
     PostgresDsn,
     computed_field,
     model_validator,
-    Field,
 )
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing_extensions import Self
@@ -25,26 +24,28 @@ def parse_cors(v: Any) -> list[str] | str:
     raise ValueError(v)
 
 
-class AIModelConfig(BaseSettings):
+class AIModelConfig:
     """单个模型配置。
 
     支持任意 LiteLLM 兼容的模型，格式为 "provider/model-name"。
     示例：openai/gpt-4o, deepseek/deepseek-chat, anthropic/claude-3-sonnet
 
-    如果未指定 api_key，将尝试从环境变量读取：
-    - provider 为 openai 时，读取 OPENAI_API_KEY
-    - provider 为 deepseek 时，读取 DEEPSEEK_API_KEY
-    - provider 为 anthropic 时，读取 ANTHROPIC_API_KEY
+    API Key 必须在对应职能配置中显式指定，不再统一配置厂商 key。
     """
 
-    model_config = SettingsConfigDict(
-        env_file="../.env",
-        env_ignore_empty=True,
-        extra="ignore",
-    )
+    def __init__(
+        self,
+        model: str,
+        api_key: str | None = None,
+        api_base: str | None = None,
+    ):
+        self.model = model
+        self._api_key = api_key
+        self.api_base = api_base
 
-    model: str  # LiteLLM 格式，如 "openai/gpt-4o"
-    api_key: str | None = None  # 可选，从环境变量读取
+    def get_api_key(self) -> str | None:
+        """获取 API Key，仅返回显式配置的 key。"""
+        return self._api_key
 
 
 class Settings(BaseSettings):
@@ -131,36 +132,41 @@ class Settings(BaseSettings):
 
     # 通用/纯文本模型：用于对话、总结、大纲生成等文本任务
     # 示例：openai/gpt-4o-mini, deepseek/deepseek-chat, anthropic/claude-3-haiku
-    AI_MODEL_TEXT: str
+    AI_MODEL_TEXT: str = "openai/gpt-4o-mini"
     AI_MODEL_TEXT_API_KEY: str | None = None
+    AI_MODEL_TEXT_API_BASE: str | None = None  # 自定义 API 基础 URL
 
     # 视觉/多模态模型：用于图像分析、3D 标注等需要视觉理解的任务
     # 示例：openai/gpt-4o, anthropic/claude-3-opus, google/gemini-pro-vision
-    AI_MODEL_VISION: str
+    AI_MODEL_VISION: str = "openai/gpt-4o"
     AI_MODEL_VISION_API_KEY: str | None = None
+    AI_MODEL_VISION_API_BASE: str | None = None  # 自定义 API 基础 URL
 
     # Embedding 模型：用于文本向量化
     # 示例：openai/text-embedding-3-small, openai/text-embedding-3-large
-    AI_MODEL_EMBEDDING: str
+    AI_MODEL_EMBEDDING: str = "openai/text-embedding-3-small"
     AI_MODEL_EMBEDDING_API_KEY: str | None = None
-    AI_EMBEDDING_DIM: int
+    AI_MODEL_EMBEDDING_API_BASE: str | None = None  # 自定义 API 基础 URL
+    AI_EMBEDDING_DIM: int = 1536  # 根据模型调整：text-embedding-3-small=1536, text-embedding-3-large=3072
 
-    # 默认温度参数
-    AI_DEFAULT_TEMPERATURE: float
-    AI_DEFAULT_MAX_TOKENS: int
+    # 默认生成参数
+    AI_DEFAULT_TEMPERATURE: float = 0.3
+    AI_DEFAULT_MAX_TOKENS: int = 2000
 
-    # Legacy settings (deprecated, kept for backward compatibility)
-    OPENAI_API_KEY: str | None = None
-    DEEPSEEK_API_KEY: str | None = None
-    AI_PROVIDER: Literal["openai", "deepseek"] = "openai"
-    AI_DEFAULT_MODEL: str = "gpt-4o-mini"
-    AI_EMBEDDING_MODEL: str = "text-embedding-3-small"
+    # ====================
+    # AI Feature Toggles
+    # ====================
+    # 功能开关：设置为 false 可关闭对应功能
+    AI_ENABLE_CHAT: bool = True  # 对话、总结、大纲、补全
+    AI_ENABLE_VISION: bool = True  # 图像分析、3D 标注
+    AI_ENABLE_EMBEDDING: bool = True  # 文本向量化、相似度推荐
 
     def get_text_model_config(self) -> AIModelConfig:
         """获取文本模型配置。"""
         return AIModelConfig(
             model=self.AI_MODEL_TEXT,
             api_key=self.AI_MODEL_TEXT_API_KEY,
+            api_base=self.AI_MODEL_TEXT_API_BASE,
         )
 
     def get_vision_model_config(self) -> AIModelConfig:
@@ -168,6 +174,7 @@ class Settings(BaseSettings):
         return AIModelConfig(
             model=self.AI_MODEL_VISION,
             api_key=self.AI_MODEL_VISION_API_KEY,
+            api_base=self.AI_MODEL_VISION_API_BASE,
         )
 
     def get_embedding_model_config(self) -> AIModelConfig:
@@ -175,6 +182,7 @@ class Settings(BaseSettings):
         return AIModelConfig(
             model=self.AI_MODEL_EMBEDDING,
             api_key=self.AI_MODEL_EMBEDDING_API_KEY,
+            api_base=self.AI_MODEL_EMBEDDING_API_BASE,
         )
 
     def _check_default_secret(self, var_name: str, value: str | None) -> None:
