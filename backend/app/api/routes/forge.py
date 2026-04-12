@@ -1,17 +1,30 @@
 import uuid
 import json
-import base64
 from typing import Any
 from pathlib import Path
-import shutil
-import asyncio
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Body
+from fastapi import APIRouter, HTTPException, UploadFile, File
 from fastapi.responses import StreamingResponse
-from sqlmodel import Session, select, SQLModel
+from sqlmodel import select
 
 from app.api.deps import CurrentUser, SessionDep
-from app.models.forge import Forge, ForgeCreate, ForgePublic, ForgesPublic, ForgeUpdate
+from app import crud
+from app.models.forge import (
+    AnnotateRequest,
+    CompleteRequest,
+    Forge,
+    ForgeCreate,
+    ForgePublic,
+    ForgesPublic,
+    ForgeUpdate,
+    ImageTo3DRequest,
+    LightAdjustRequest,
+    LightAdjustWithScreenshotRequest,
+    LightAutoOptimizeRequest,
+    LightOptimizeRequest,
+    ModelInfo,
+    SummarizeRequest,
+)
 from app.models import Message
 from app.core.ai_client import ChatMessage, ChatRequest, ai_client, AIFeatureDisabledError
 from app.workflows.outline import outline_graph
@@ -60,58 +73,6 @@ async def _refresh_embedding(forge: Forge, session: SessionDep) -> None:
 router = APIRouter(prefix="/forge", tags=["forge"])
 
 
-class ModelInfo(SQLModel):
-    url: str
-    filename: str
-    size: int
-
-
-class LightConfig(SQLModel):
-    ambient: float = 0.5
-    hemisphere: dict = {"skyColor": "#ffffff", "groundColor": "#444444", "intensity": 0.4}
-    directional: list = [{"position": [5, 10, 5], "intensity": 1.0, "color": "#ffffff"}]
-    environment: str = "studio"
-
-class LightAdjustRequest(SQLModel):
-    feedback: str
-    currentConfig: dict | None = None
-    modelInfo: dict | None = None
-
-class LightOptimizeRequest(SQLModel):
-    modelPath: str
-
-class LightAutoOptimizeRequest(SQLModel):
-    screenshot: str
-    currentConfig: dict | None = None
-    iteration: int = 1
-
-class LightAdjustWithScreenshotRequest(SQLModel):
-    feedback: str
-    currentConfig: dict | None = None
-    screenshot: str | None = None
-
-
-class SummarizeRequest(SQLModel):
-    forge_ids: list[uuid.UUID]
-    focus: str | None = None
-
-class CompleteRequest(SQLModel):
-    text: str
-    instruction: str | None = None
-
-class AnnotateRequest(SQLModel):
-    screenshot: str  # base64 data URL 或 http URL
-
-
-class ImageTo3DRequest(SQLModel):
-    image_base64: str | None = None
-    image_url: str | None = None
-    texture: bool = True
-    octree_resolution: int = 256
-    num_inference_steps: int = 5
-    guidance_scale: float = 5.0
-
-
 @router.post("/image-to-3d", response_model=dict)
 async def image_to_3d(
     *,
@@ -142,9 +103,7 @@ def read_forges(
     """
     Retrieve forges.
     """
-    statement = select(Forge).where(Forge.owner_id == current_user.id)
-    results = session.exec(statement.offset(skip).limit(limit))
-    forges = results.all()
+    forges = crud.get_forges(session=session, owner_id=current_user.id, skip=skip, limit=limit)
     return ForgesPublic(data=forges, count=len(forges))
 
 
@@ -163,17 +122,7 @@ async def create_forge(
     if not forge_in.is_folder and not forge_in.title:
         forge_in.title = "nova"
 
-    forge = Forge(
-        title=forge_in.title,
-        content=forge_in.content,
-        is_folder=forge_in.is_folder,
-        parent_id=forge_in.parent_id,
-        owner_id=current_user.id,
-    )
-
-    session.add(forge)
-    session.commit()
-    session.refresh(forge)
+    forge = crud.create_forge(session=session, forge_in=forge_in, owner_id=current_user.id)
 
     if not forge_in.is_folder:
         await _refresh_embedding(forge, session)
@@ -191,12 +140,9 @@ async def summarize_forges(
     request: SummarizeRequest,
 ) -> Any:
     """对多篇笔记进行知识梳理，返回结构化总结报告（LangGraph 工作流）。"""
-    forges = session.exec(
-        select(Forge).where(
-            Forge.id.in_(request.forge_ids),  # type: ignore[attr-defined]
-            Forge.owner_id == current_user.id,
-        )
-    ).all()
+    forges = crud.get_forges_by_ids(
+        session=session, forge_ids=request.forge_ids, owner_id=current_user.id
+    )
 
     if not forges:
         raise HTTPException(status_code=404, detail="未找到指定笔记")
@@ -315,7 +261,7 @@ def read_forge(
     current_user: CurrentUser,
 ) -> Any:
     """Get forge by ID."""
-    forge = session.get(Forge, id)
+    forge = crud.get_forge(session=session, forge_id=id)
     if not forge:
         raise HTTPException(status_code=404, detail="Forge not found")
     if forge.owner_id != current_user.id:
@@ -334,7 +280,7 @@ async def update_forge(
     """
     Update forge.
     """
-    forge = session.get(Forge, id)
+    forge = crud.get_forge(session=session, forge_id=id)
     if not forge:
         raise HTTPException(status_code=404, detail="Forge not found")
     if forge.owner_id != current_user.id:
@@ -342,10 +288,7 @@ async def update_forge(
 
     update_data = forge_in.model_dump(exclude_unset=True)
     content_changed = "title" in update_data or "content" in update_data
-    forge.sqlmodel_update(update_data)
-    session.add(forge)
-    session.commit()
-    session.refresh(forge)
+    forge = crud.update_forge(session=session, db_forge=forge, forge_in=forge_in)
 
     if content_changed and not forge.is_folder:
         await _refresh_embedding(forge, session)
@@ -363,14 +306,13 @@ def delete_forge(
     """
     Delete forge.
     """
-    forge = session.get(Forge, id)
+    forge = crud.get_forge(session=session, forge_id=id)
     if not forge:
         raise HTTPException(status_code=404, detail="Forge not found")
     if forge.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not enough permissions")
 
-    session.delete(forge)
-    session.commit()
+    crud.delete_forge(session=session, db_forge=forge)
     return Message(message="Forge deleted successfully")
 
 
@@ -383,7 +325,7 @@ async def recommend_forges(
     limit: int = 5,
 ) -> Any:
     """基于向量相似度推荐关联笔记。"""
-    forge = session.get(Forge, id)
+    forge = crud.get_forge(session=session, forge_id=id)
     if not forge:
         raise HTTPException(status_code=404, detail="Forge not found")
     if forge.owner_id != current_user.id:
@@ -418,7 +360,7 @@ async def reembed_forge(
     current_user: CurrentUser,
 ) -> Any:
     """手动触发单个笔记的 embedding 生成（用于存量数据补全）。"""
-    forge = session.get(Forge, id)
+    forge = crud.get_forge(session=session, forge_id=id)
     if not forge:
         raise HTTPException(status_code=404, detail="Forge not found")
     if forge.owner_id != current_user.id:
@@ -436,7 +378,7 @@ async def generate_outline(
     current_user: CurrentUser,
 ) -> Any:
     """为笔记生成结构化大纲（LangGraph 工作流）。"""
-    forge = session.get(Forge, id)
+    forge = crud.get_forge(session=session, forge_id=id)
     if not forge:
         raise HTTPException(status_code=404, detail="Forge not found")
     if forge.owner_id != current_user.id:
@@ -465,7 +407,7 @@ async def annotate_3d_asset(
     request: AnnotateRequest,
 ) -> Any:
     """对 3D 资产截图进行自动标注，返回标签和描述。"""
-    forge = session.get(Forge, id)
+    forge = crud.get_forge(session=session, forge_id=id)
     if not forge:
         raise HTTPException(status_code=404, detail="Forge not found")
     if forge.owner_id != current_user.id:
@@ -502,7 +444,7 @@ async def complete_text(
     request: CompleteRequest,
 ) -> StreamingResponse:
     """流式文案补全 / 代码优化，返回 SSE 事件流。"""
-    forge = session.get(Forge, id)
+    forge = crud.get_forge(session=session, forge_id=id)
     if not forge:
         raise HTTPException(status_code=404, detail="Forge not found")
     if forge.owner_id != current_user.id:
