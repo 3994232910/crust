@@ -1,5 +1,5 @@
 import { Canvas, useThree } from '@react-three/fiber'
-import { OrbitControls, useGLTF, Environment } from '@react-three/drei'
+import { OrbitControls, useGLTF } from '@react-three/drei'
 import { Suspense, useState, useEffect, useMemo, useRef, useCallback, Component, type ReactNode } from 'react'
 import type { ThreeEvent } from '@react-three/fiber'
 import { OpenAPI } from '@/client'
@@ -311,7 +311,7 @@ export function Model3DRenderer({ modelPath, onModelClick, initialView }: Model3
               color={light.color}
             />
           ))}
-          <Environment preset={lightConfig.environment as any} />
+          {/* Environment HDR removed — CDN unreachable in CN; manual lights cover it */}
           <ModelControls lightConfig={lightConfig} />
           <ScreenshotCapture 
             onCapture={handleScreenshotReady} 
