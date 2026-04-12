@@ -1,6 +1,6 @@
 import { Link as RouterLink } from "@tanstack/react-router"
 import { ChevronsUpDown, LogOut, Settings } from "lucide-react"
-
+import { OpenAPI } from "@/client"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   DropdownMenu,
@@ -18,7 +18,6 @@ import {
 } from "@/components/ui/sidebar"
 import useAuth from "@/hooks/useAuth"
 import { getInitials } from "@/utils"
-import { OpenAPI } from "@/client"
 
 interface UserInfoProps {
   fullName?: string
@@ -32,8 +31,8 @@ function UserInfo({ fullName, email, avatarUrl }: UserInfoProps) {
       <Avatar className="size-8">
         {avatarUrl ? (
           <>
-            <AvatarImage 
-              src={`${OpenAPI.BASE}${avatarUrl}`} 
+            <AvatarImage
+              src={`${OpenAPI.BASE}${avatarUrl}`}
               alt={fullName || "Avatar"}
             />
             <AvatarFallback className="bg-zinc-600 text-white">
@@ -79,8 +78,8 @@ export function User({ user }: { user: any }) {
               className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
               data-testid="user-menu"
             >
-              <UserInfo 
-                fullName={user?.full_name} 
+              <UserInfo
+                fullName={user?.full_name}
                 email={user?.email}
                 avatarUrl={user?.avatar_url}
               />
@@ -94,8 +93,8 @@ export function User({ user }: { user: any }) {
             sideOffset={4}
           >
             <DropdownMenuLabel className="p-0 font-normal">
-              <UserInfo 
-                fullName={user?.full_name} 
+              <UserInfo
+                fullName={user?.full_name}
                 email={user?.email}
                 avatarUrl={user?.avatar_url}
               />
