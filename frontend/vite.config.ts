@@ -13,15 +13,6 @@ export default defineConfig({
   define: {
     "process.env": {},
   },
-  server: {
-    proxy: {
-      "/api": {
-        target: "http://127.0.0.1:8000",
-        changeOrigin: true,
-        secure: false,
-      },
-    },
-  },
   plugins: [
     tanstackRouter({
       target: "react",
@@ -32,12 +23,13 @@ export default defineConfig({
   ],
   server: {
     proxy: {
-      '/api': {
-        target: 'http://localhost:8000',
+      "/api": {
+        target: "http://127.0.0.1:8000",
         changeOrigin: true,
+        secure: false,
       },
-      '/models': {
-        target: 'http://localhost:8000',
+      "/models": {
+        target: "http://127.0.0.1:8000",
         changeOrigin: true,
       },
     },
