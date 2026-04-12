@@ -48,3 +48,65 @@ class Forge(ForgeBase, table=True):
         default=None,
         sa_column=Column(Vector(EMBEDDING_DIM), nullable=True),
     )
+
+
+# ---------------------------------------------------------------------------
+# AI / request-only schemas (no DB table)
+# ---------------------------------------------------------------------------
+
+class ModelInfo(SQLModel):
+    url: str
+    filename: str
+    size: int
+
+
+class LightConfig(SQLModel):
+    ambient: float = 0.5
+    hemisphere: dict = {"skyColor": "#ffffff", "groundColor": "#444444", "intensity": 0.4}
+    directional: list = [{"position": [5, 10, 5], "intensity": 1.0, "color": "#ffffff"}]
+    environment: str = "studio"
+
+
+class LightAdjustRequest(SQLModel):
+    feedback: str
+    currentConfig: dict | None = None
+    modelInfo: dict | None = None
+
+
+class LightOptimizeRequest(SQLModel):
+    modelPath: str
+
+
+class LightAutoOptimizeRequest(SQLModel):
+    screenshot: str
+    currentConfig: dict | None = None
+    iteration: int = 1
+
+
+class LightAdjustWithScreenshotRequest(SQLModel):
+    feedback: str
+    currentConfig: dict | None = None
+    screenshot: str | None = None
+
+
+class SummarizeRequest(SQLModel):
+    forge_ids: list[uuid.UUID]
+    focus: str | None = None
+
+
+class CompleteRequest(SQLModel):
+    text: str
+    instruction: str | None = None
+
+
+class AnnotateRequest(SQLModel):
+    screenshot: str
+
+
+class ImageTo3DRequest(SQLModel):
+    image_base64: str | None = None
+    image_url: str | None = None
+    texture: bool = True
+    octree_resolution: int = 256
+    num_inference_steps: int = 5
+    guidance_scale: float = 5.0

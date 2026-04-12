@@ -5,6 +5,7 @@ from sqlmodel import Session, select
 
 from app.core.security import get_password_hash, verify_password
 from app.models import Item, ItemCreate, User, UserCreate, UserUpdate
+from app.models.forge import Forge, ForgeCreate, ForgeUpdate
 
 
 def create_user(*, session: Session, user_create: UserCreate) -> User:
@@ -66,3 +67,57 @@ def create_item(*, session: Session, item_in: ItemCreate, owner_id: uuid.UUID) -
     session.commit()
     session.refresh(db_item)
     return db_item
+
+
+# ---------- Forge CRUD ----------
+
+def get_forge(*, session: Session, forge_id: uuid.UUID) -> Forge | None:
+    return session.get(Forge, forge_id)
+
+
+def get_forges(
+    *, session: Session, owner_id: uuid.UUID, skip: int = 0, limit: int = 100
+) -> list[Forge]:
+    statement = (
+        select(Forge)
+        .where(Forge.owner_id == owner_id)
+        .offset(skip)
+        .limit(limit)
+    )
+    return list(session.exec(statement).all())
+
+
+def get_forges_by_ids(
+    *, session: Session, forge_ids: list[uuid.UUID], owner_id: uuid.UUID
+) -> list[Forge]:
+    statement = select(Forge).where(
+        Forge.id.in_(forge_ids),  # type: ignore[attr-defined]
+        Forge.owner_id == owner_id,
+    )
+    return list(session.exec(statement).all())
+
+
+def create_forge(
+    *, session: Session, forge_in: ForgeCreate, owner_id: uuid.UUID
+) -> Forge:
+    forge = Forge.model_validate(forge_in, update={"owner_id": owner_id})
+    session.add(forge)
+    session.commit()
+    session.refresh(forge)
+    return forge
+
+
+def update_forge(
+    *, session: Session, db_forge: Forge, forge_in: ForgeUpdate
+) -> Forge:
+    update_data = forge_in.model_dump(exclude_unset=True)
+    db_forge.sqlmodel_update(update_data)
+    session.add(db_forge)
+    session.commit()
+    session.refresh(db_forge)
+    return db_forge
+
+
+def delete_forge(*, session: Session, db_forge: Forge) -> None:
+    session.delete(db_forge)
+    session.commit()

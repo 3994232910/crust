@@ -1,98 +1,23 @@
 from datetime import datetime, timezone, timedelta
-from typing import List, Literal, Optional
+from typing import List, Literal
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
 
-
-class EvolutionLevel(BaseModel):
-    stage: Literal["hadean", "archean", "phanerozoic"]
-    progress: float
-    total_score: float
-    ready_for_upgrade: bool = False
-
-
-class UserEvolutionStats(BaseModel):
-    total_usage_hours: float
-    total_files: int
-    total_storage_mb: float
-    recent_activity_score: float
-    related_items_count: int
-
-
-class DashboardData(BaseModel):
-    user_id: str
-    evolution_level: EvolutionLevel
-    stats: UserEvolutionStats
-    last_updated: datetime
-    next_unlock_desc: str
-
-
-class TaskBase(BaseModel):
-    title: str
-    description: Optional[str] = ""
-    priority: Literal["low", "medium", "high"] = "low"
-
-
-class TaskCreate(TaskBase):
-    pass
-
-
-class TaskUpdate(BaseModel):
-    completed: Optional[bool] = None
-    status: Optional[Literal["todo", "processing", "done"]] = None
-
-
-class TaskPublic(TaskBase):
-    id: str
-    completed: bool
-    status: Literal["todo", "processing", "done"] = "todo"
-    energy: int
-    created_at: datetime
-    updated_at: datetime
-
-
-class LogEntry(BaseModel):
-    id: str
-    content: str
-    impact: float
-    created_at: datetime
-
-
-class LogCreate(BaseModel):
-    content: str = Field(min_length=1)
-
-
-class KanbanItem(BaseModel):
-    id: int
-    content: str
-    tag: str
-
-
-class KanbanData(BaseModel):
-    todo: List[KanbanItem]
-    processing: List[KanbanItem]
-    done: List[KanbanItem]
-
-
-class WeekPlanDay(BaseModel):
-    day: str
-    date: str
-    complete: int
-    total: int
-    progress: int
-
-
-class HeatmapEntry(BaseModel):
-    date: str
-    count: int
-
-
-class ActivityData(BaseModel):
-    heatmap: List[HeatmapEntry]
-    trend: List[int]
-
+from app.models.dashboard import (
+    ActivityData,
+    DashboardData,
+    EvolutionLevel,
+    HeatmapEntry,
+    KanbanData,
+    KanbanItem,
+    LogCreate,
+    LogEntry,
+    TaskPublic,
+    TaskUpdate,
+    UserEvolutionStats,
+    WeekPlanDay,
+)
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
