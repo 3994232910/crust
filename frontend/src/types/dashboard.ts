@@ -20,6 +20,7 @@ export interface DashboardData {
   evolution_level: EvolutionLevel
   stats: UserEvolutionStats
   last_updated: string
+  next_unlock_desc: string
 }
 
 export interface DashboardTask {
@@ -28,6 +29,7 @@ export interface DashboardTask {
   description: string
   priority: 'low' | 'medium' | 'high'
   completed: boolean
+  status: 'todo' | 'processing' | 'done'
   energy: number
   created_at: string
   updated_at: string
@@ -46,4 +48,29 @@ export interface TaskUpdateRequest {
 
 export interface LogCreateRequest {
   content: string
+}
+
+export interface KanbanItem {
+  id: number
+  content: string
+  tag: string
+}
+
+export interface KanbanData {
+  todo: KanbanItem[]
+  processing: KanbanItem[]
+  done: KanbanItem[]
+}
+
+export interface WeekPlanDay {
+  day: string
+  date: string
+  complete: number
+  total: number
+  progress: number
+}
+
+export interface ActivityData {
+  heatmap: Array<{ date: string; count: number }>
+  trend: number[]
 }

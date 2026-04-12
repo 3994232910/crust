@@ -6,94 +6,19 @@ import { LeftRail } from '../layout/LeftRail'
 import { CenterTop } from '../layout/CenterTop'
 import { CenterBottom } from '../layout/CenterBottom'
 import { RightPanel } from '../layout/RightPanel'
-import type { DashboardData, DashboardLog, DashboardTask, EvolutionStage } from '@/types/dashboard'
+import type { ActivityData, DashboardData, DashboardLog, DashboardTask, EvolutionStage, KanbanData, WeekPlanDay } from '@/types/dashboard'
 
 const apiPrefix = '/api/v1/dashboard'
-
-// Mock data structure as provided
-const dashboardData = {
-  core: {
-    stage: "熔岩星体 Stage 1",
-    progress: 36.9,
-    unlockDesc: "下一阶段：需累计 20 条知识关联",
-  },
-  stats: {
-    notes: 3,
-    connections: 1,
-    storage: "3.2MB",
-    activeTime: "1.5h",
-  },
-  energy: {
-    today: 24,
-    taskComplete: 2,
-    taskTotal: 3,
-  },
-  todayTasks: [
-    {
-      id: "1",
-      title: "整理今日笔记",
-      description: "将笔记分类并补全关键标签",
-      priority: "high",
-      completed: false,
-      energy: 30,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    },
-    {
-      id: "2",
-      title: "补充周计划记录",
-      description: "把本周任务进度写入日记系统",
-      priority: "medium",
-      completed: true,
-      energy: 15,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    },
-    {
-      id: "3",
-      title: "整理知识关联节点",
-      description: "把相关笔记链接到知识图谱中",
-      priority: "medium",
-      completed: true,
-      energy: 8,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    },
-  ] as DashboardTask[],
-  weekPlan: [
-    { day: "周一", date: "04/01", complete: 2, total: 5, progress: 40 },
-    { day: "周二", date: "04/02", complete: 3, total: 6, progress: 50 },
-    { day: "周三", date: "04/03", complete: 4, total: 6, progress: 67 },
-    { day: "周四", date: "04/04", complete: 1, total: 4, progress: 25 },
-    { day: "周五", date: "04/05", complete: 0, total: 5, progress: 0 },
-    { day: "周六", date: "04/06", complete: 0, total: 0, progress: 0 },
-    { day: "周日", date: "04/07", complete: 0, total: 0, progress: 0 },
-  ],
-  kanban: {
-    todo: [
-      { id: 101, content: "复习数学公式", tag: "study" },
-      { id: 102, content: "整理 Obsidian 模板", tag: "tool" },
-    ],
-    processing: [
-      { id: 201, content: "英语单词背诵", tag: "study" },
-    ],
-    done: [
-      { id: 301, content: "高数作业", tag: "study" },
-      { id: 302, content: "整理笔记结构", tag: "knowledge" },
-    ],
-  },
-  activityFeed: [
-    "完成高数作业 +1 Energy",
-    "添加新笔记 · 知识体系更新",
-    "今日连续活跃 1 天",
-  ],
-}
 
 export function DashboardPage() {
   const { theme, setTheme } = useTheme()
   const [dashboard, setDashboard] = useState<DashboardData | null>(null)
-  const [, setTasks] = useState<DashboardTask[]>([])
-  const [logs, setLogs] = useState<DashboardLog[]>([])
+  const [tasks, setTasks] = useState<DashboardTask[]>([])
+  const [_logs, setLogs] = useState<DashboardLog[]>([])
+  const [weekPlan, setWeekPlan] = useState<WeekPlanDay[]>([])
+  const [kanban, setKanban] = useState<KanbanData>({ todo: [], processing: [], done: [] })
+  const [heatmapData, setHeatmapData] = useState<Array<{ date: string; count: number }>>([])
+  const [trendData, setTrendData] = useState<number[]>([])
   const [busyTaskId, setBusyTaskId] = useState<string | null>(null)
   const [isSubmittingLog, setIsSubmittingLog] = useState(false)
   const [_isLoading, setIsLoading] = useState(true)
@@ -102,23 +27,36 @@ export function DashboardPage() {
   const refreshAll = useCallback(async () => {
     try {
       setIsLoading(true)
-      const [dashboardDataResponse, tasksDataResponse, logsDataResponse] = await Promise.all([
+      const [dashboardDataResponse, tasksDataResponse, logsDataResponse, weekPlanResponse, kanbanResponse, activityResponse] = await Promise.all([
         fetch(`${apiPrefix}/evolution`),
         fetch(`${apiPrefix}/tasks`),
         fetch(`${apiPrefix}/logs`),
+        fetch(`${apiPrefix}/week-plan`),
+        fetch(`${apiPrefix}/kanban`),
+        fetch(`${apiPrefix}/activity`),
       ])
 
       if (!dashboardDataResponse.ok) throw new Error(`Failed to fetch dashboard: ${dashboardDataResponse.statusText}`)
       if (!tasksDataResponse.ok) throw new Error(`Failed to fetch tasks: ${tasksDataResponse.statusText}`)
       if (!logsDataResponse.ok) throw new Error(`Failed to fetch logs: ${logsDataResponse.statusText}`)
+      if (!weekPlanResponse.ok) throw new Error(`Failed to fetch week-plan: ${weekPlanResponse.statusText}`)
+      if (!kanbanResponse.ok) throw new Error(`Failed to fetch kanban: ${kanbanResponse.statusText}`)
+      if (!activityResponse.ok) throw new Error(`Failed to fetch activity: ${activityResponse.statusText}`)
 
       const dashboardData = (await dashboardDataResponse.json()) as DashboardData
       const tasksData = (await tasksDataResponse.json()) as DashboardTask[]
       const logsData = (await logsDataResponse.json()) as DashboardLog[]
+      const weekPlanData = (await weekPlanResponse.json()) as WeekPlanDay[]
+      const kanbanData = (await kanbanResponse.json()) as KanbanData
+      const activityData = (await activityResponse.json()) as ActivityData
 
       setDashboard(dashboardData)
       setTasks(tasksData)
       setLogs(logsData)
+      setWeekPlan(weekPlanData)
+      setKanban(kanbanData)
+      setHeatmapData(activityData.heatmap)
+      setTrendData(activityData.trend)
       setError(null)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
@@ -174,44 +112,24 @@ export function DashboardPage() {
     }
   }
 
-  if (error) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-background text-foreground px-6">
-        <div className="rounded-xl border border-destructive bg-card p-8 text-center shadow-lg">
-          <h2 className="text-2xl font-semibold text-destructive mb-3">无法加载仪表盘</h2>
-          <p className="mb-4 text-muted-foreground">{error}</p>
-          <button
-            type="button"
-            onClick={refreshAll}
-            className="rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
-          >
-            重新加载
-          </button>
-        </div>
-      </div>
-    )
-  }
+  // backend unavailable — render with mock data, show a non-blocking banner
 
   const isReadyToUpgrade = dashboard?.evolution_level.ready_for_upgrade ?? false
   const currentStage = (dashboard?.evolution_level.stage ?? 'hadean') as EvolutionStage
 
-  // Mock data for heatmap and trends
-  const heatmapData = Array.from({ length: 90 }, (_, i) => ({
-    date: new Date(Date.now() - i * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    count: Math.floor(Math.random() * 5)
-  }))
-
-  const trendData = Array.from({ length: 30 }, (_, i) => ({
-    date: new Date(Date.now() - i * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    value: Math.floor(Math.random() * 100) + 50
-  }))
-
   return (
+    <>
+      {error && (
+        <div className="flex items-center gap-3 bg-destructive/10 border-b border-destructive/30 px-4 py-2 text-sm text-destructive">
+          <span>后端连接失败，显示本地数据：{error}</span>
+          <button type="button" onClick={refreshAll} className="underline hover:no-underline">重试</button>
+        </div>
+      )}
     <DashboardShell
       header={
         <DashboardHeader
           productName="Knowledge Core"
-          currentStage={dashboardData.core.stage}
+          currentStage={currentStage}
           isDarkMode={theme === 'dark'}
           onToggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
         />
@@ -219,31 +137,36 @@ export function DashboardPage() {
       leftRail={
         <LeftRail
           stage={currentStage}
-          progress={dashboardData.core.progress}
-          nextUnlock={dashboardData.core.unlockDesc}
+          progress={dashboard?.evolution_level.progress ?? 0}
+          nextUnlock={dashboard?.next_unlock_desc ?? ''}
           readyForUpgrade={isReadyToUpgrade}
           stats={{
-            totalNotes: dashboardData.stats.notes,
-            storage: dashboardData.stats.storage,
-            activeTime: dashboardData.stats.activeTime,
-            connections: dashboardData.stats.connections,
+            totalNotes: dashboard?.stats.total_files ?? 0,
+            storage: `${(dashboard?.stats.total_storage_mb ?? 0).toFixed(1)}MB`,
+            activeTime: `${(dashboard?.stats.total_usage_hours ?? 0).toFixed(1)}h`,
+            connections: dashboard?.stats.related_items_count ?? 0,
           }}
           heatmapData={heatmapData}
-          trendData={trendData.map(d => d.value)}
+          trendData={trendData}
         />
       }
       centerTop={<CenterTop stage={currentStage} />}
-      centerBottom={<CenterBottom weekPlan={dashboardData.weekPlan} kanban={dashboardData.kanban} />}
+      centerBottom={<CenterBottom weekPlan={weekPlan} kanban={kanban} />}
       rightPanel={
         <RightPanel
-          energy={dashboardData.energy}
+          energy={{
+            today: tasks.filter(t => t.completed).reduce((sum, t) => sum + t.energy, 0),
+            taskComplete: tasks.filter(t => t.completed).length,
+            taskTotal: tasks.length,
+          }}
           onLogSubmit={handleCreateLog}
           isSubmittingLog={isSubmittingLog}
-          tasks={dashboardData.todayTasks}
+          tasks={tasks}
           onTaskToggle={handleToggleTask}
           busyTaskId={busyTaskId}
         />
       }
     />
+    </>
   )
 }

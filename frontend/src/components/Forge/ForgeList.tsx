@@ -135,7 +135,7 @@ export function ForgeList() {
   // Load forges on mount
   useEffect(() => {
     loadForges()
-  }, [loadForges])
+  }, [])  // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleCreateNew = () => {
     setIsCreatingFolder(false)
