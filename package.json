@@ -11,9 +11,7 @@
     "test:ui": "bun run --filter frontend test:ui"
   },
   "dependencies": {
-
+    "framer-motion": "^12.38.0"
   },
-  "devDependencies": {
-
-  }
+  "devDependencies": {}
 }

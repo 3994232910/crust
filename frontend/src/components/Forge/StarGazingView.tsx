@@ -1,20 +1,26 @@
 /// <reference types="@react-three/fiber" />
-import { useRef, useState, useMemo, useEffect } from 'react'
-import { Canvas, useFrame, type ThreeElements } from '@react-three/fiber'
-import { OrbitControls, Text, Sphere, MeshDistortMaterial } from '@react-three/drei'
-import * as THREE from 'three'
-import { FileText, Folder, X } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { ForgeService, type ForgePublic } from '@/client'
+
+import {
+  MeshDistortMaterial,
+  OrbitControls,
+  Sphere,
+  Text,
+} from "@react-three/drei"
+import { Canvas, useFrame, type ThreeElements } from "@react-three/fiber"
+import { FileText, Folder, X } from "lucide-react"
+import { useEffect, useMemo, useRef, useState } from "react"
+import * as THREE from "three"
+import { type ForgePublic, ForgeService } from "@/client"
+import { Button } from "@/components/ui/button"
 
 // 全局扩展 JSX 类型，彻底解决 R3F 标签 TS 报错
 declare global {
   namespace JSX {
-    interface IntrinsicElements extends ThreeElements {}
+    interface IntrinsicElements extends Partial<ThreeElements> {}
   }
 }
 
-interface Forge extends Omit<ForgePublic, 'content' | 'is_folder'> {
+interface Forge extends Omit<ForgePublic, "content" | "is_folder"> {
   content?: string
   is_folder?: boolean
 }
@@ -54,7 +60,7 @@ function Planet({ forge, position, onClick, isStar = false }: PlanetProps) {
         onPointerOut={() => setHovered(false)}
       >
         <MeshDistortMaterial
-          color={forge.is_folder ? '#8b5cf6' : '#3b82f6'}
+          color={forge.is_folder ? "#8b5cf6" : "#3b82f6"}
           distort={0.3}
           speed={2}
           roughness={0.2}
@@ -66,7 +72,7 @@ function Planet({ forge, position, onClick, isStar = false }: PlanetProps) {
       <Text
         position={[position[0], position[1] + (isStar ? 2 : 1), position[2]]}
         fontSize={0.5}
-        color={hovered ? '#fbbf24' : '#94a3b8'}
+        color={hovered ? "#fbbf24" : "#94a3b8"}
         anchorX="center"
         anchorY="middle"
       >
@@ -92,7 +98,7 @@ export default function StarGazingView({ onClose }: StarGazingViewProps) {
         const response = await ForgeService.readForges()
         setForges(response.data as Forge[])
       } catch (error) {
-        console.error('Failed to load forges:', error)
+        console.error("Failed to load forges:", error)
       } finally {
         setLoading(false)
       }
@@ -102,8 +108,8 @@ export default function StarGazingView({ onClose }: StarGazingViewProps) {
 
   // 计算行星位置 - 文件夹作为恒星，文件作为行星
   const planetarySystems = useMemo(() => {
-    const folders = forges.filter(f => f.is_folder)
-    const files = forges.filter(f => !f.is_folder)
+    const folders = forges.filter((f) => f.is_folder)
+    const files = forges.filter((f) => !f.is_folder)
 
     // 为每个文件夹创建一个恒星系统
     return folders.map((folder, index) => {
@@ -114,11 +120,11 @@ export default function StarGazingView({ onClose }: StarGazingViewProps) {
       const starPosition: [number, number, number] = [
         Math.cos(angle) * distance,
         0,
-        Math.sin(angle) * distance
+        Math.sin(angle) * distance,
       ]
 
       // 找到属于这个文件夹的文件
-      const planetFiles = files.filter(f => f.parent_id === folder.id)
+      const planetFiles = files.filter((f) => f.parent_id === folder.id)
 
       // 计算行星位置
       const planets = planetFiles.map((file, planetIndex) => {
@@ -130,14 +136,14 @@ export default function StarGazingView({ onClose }: StarGazingViewProps) {
           position: [
             starPosition[0] + Math.cos(planetAngle) * orbitRadius,
             (Math.random() - 0.5) * 2,
-            starPosition[2] + Math.sin(planetAngle) * orbitRadius
-          ] as [number, number, number]
+            starPosition[2] + Math.sin(planetAngle) * orbitRadius,
+          ] as [number, number, number],
         }
       })
 
       return {
         star: { forge: folder, position: starPosition },
-        planets
+        planets,
       }
     })
   }, [forges])
@@ -211,7 +217,11 @@ export default function StarGazingView({ onClose }: StarGazingViewProps) {
                 <h2 className="text-xl font-semibold text-slate-100">
                   {selectedForge.title}
                 </h2>
-                <Button variant="ghost" size="icon" onClick={() => setSelectedForge(null)}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setSelectedForge(null)}
+                >
                   <X className="h-5 w-5" />
                 </Button>
               </div>
@@ -223,7 +233,7 @@ export default function StarGazingView({ onClose }: StarGazingViewProps) {
                   ) : (
                     <FileText className="h-4 w-4" />
                   )}
-                  <span>{selectedForge.is_folder ? 'Folder' : 'File'}</span>
+                  <span>{selectedForge.is_folder ? "Folder" : "File"}</span>
                 </div>
 
                 {selectedForge.content && (
@@ -237,7 +247,7 @@ export default function StarGazingView({ onClose }: StarGazingViewProps) {
                 <div className="text-xs text-slate-500">
                   <div>ID: {selectedForge.id}</div>
                   <div>
-                    Updated:{' '}
+                    Updated:{" "}
                     {new Date(selectedForge.updated_at).toLocaleString()}
                   </div>
                 </div>
