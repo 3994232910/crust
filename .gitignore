@@ -9,3 +9,12 @@ node_modules/
 # Environment variables
 .env
 !.env.example
+
+# IDE
+.idea/
+
+# Claude Code local settings
+.claude/
+
+# TanStack Router/Query cache
+frontend/.tanstack/
