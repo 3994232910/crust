@@ -49,6 +49,8 @@ from app.models.forge import (
 from app.models.dashboard import (
     ActivityData,
     DashboardData,
+    DashboardLog,
+    DashboardTask,
     EvolutionLevel,
     HeatmapEntry,
     KanbanData,
@@ -58,6 +60,7 @@ from app.models.dashboard import (
     TaskCreate,
     TaskPublic,
     TaskUpdate,
+    UserEvolution,
     UserEvolutionStats,
     WeekPlanDay,
 )
@@ -107,6 +110,8 @@ __all__ = [
     # Dashboard
     "ActivityData",
     "DashboardData",
+    "DashboardLog",
+    "DashboardTask",
     "EvolutionLevel",
     "HeatmapEntry",
     "KanbanData",
@@ -116,6 +121,7 @@ __all__ = [
     "TaskCreate",
     "TaskPublic",
     "TaskUpdate",
+    "UserEvolution",
     "UserEvolutionStats",
     "WeekPlanDay",
     # Common

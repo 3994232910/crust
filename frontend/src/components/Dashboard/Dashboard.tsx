@@ -10,6 +10,15 @@ import type { ActivityData, DashboardData, DashboardLog, DashboardTask, Evolutio
 
 const apiPrefix = '/api/v1/dashboard'
 
+function authHeaders(): HeadersInit {
+  const token = localStorage.getItem('access_token')
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
+async function apiFetch(url: string, init?: RequestInit): Promise<Response> {
+  return fetch(url, { ...init, headers: { ...authHeaders(), ...init?.headers } })
+}
+
 export function DashboardPage() {
   const { theme, setTheme } = useTheme()
   const [dashboard, setDashboard] = useState<DashboardData | null>(null)
@@ -28,12 +37,12 @@ export function DashboardPage() {
     try {
       setIsLoading(true)
       const [dashboardDataResponse, tasksDataResponse, logsDataResponse, weekPlanResponse, kanbanResponse, activityResponse] = await Promise.all([
-        fetch(`${apiPrefix}/evolution`),
-        fetch(`${apiPrefix}/tasks`),
-        fetch(`${apiPrefix}/logs`),
-        fetch(`${apiPrefix}/week-plan`),
-        fetch(`${apiPrefix}/kanban`),
-        fetch(`${apiPrefix}/activity`),
+        apiFetch(`${apiPrefix}/evolution`),
+        apiFetch(`${apiPrefix}/tasks`),
+        apiFetch(`${apiPrefix}/logs`),
+        apiFetch(`${apiPrefix}/week-plan`),
+        apiFetch(`${apiPrefix}/kanban`),
+        apiFetch(`${apiPrefix}/activity`),
       ])
 
       if (!dashboardDataResponse.ok) throw new Error(`Failed to fetch dashboard: ${dashboardDataResponse.statusText}`)
@@ -75,7 +84,7 @@ export function DashboardPage() {
   const handleToggleTask = async (task: DashboardTask) => {
     setBusyTaskId(task.id)
     try {
-      const response = await fetch(`${apiPrefix}/tasks/${task.id}`, {
+      const response = await apiFetch(`${apiPrefix}/tasks/${task.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ completed: !task.completed }),
@@ -95,7 +104,7 @@ export function DashboardPage() {
   const handleCreateLog = async (content: string) => {
     setIsSubmittingLog(true)
     try {
-      const response = await fetch(`${apiPrefix}/logs`, {
+      const response = await apiFetch(`${apiPrefix}/logs`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content }),

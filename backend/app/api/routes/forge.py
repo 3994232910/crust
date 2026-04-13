@@ -177,7 +177,77 @@ async def summarize_forges(
     return {"summary": result["summary"], "count": len(forges)}
 
 
-# 3. 模型路由（必须放在 /{id} 之前！）
+# 3. 文件导入路由（必须放在 /{id} 之前！）
+IMPORT_ALLOWED_EXTENSIONS = {
+    "pdf", "docx", "pptx", "xlsx", "xls",
+    "html", "htm", "csv", "json", "xml",
+    "epub", "txt", "md",
+}
+
+@router.post("/import-file", response_model=ForgePublic)
+async def import_file_as_forge(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    parent_id: str | None = None,
+) -> Any:
+    """上传文档（PDF/DOCX/PPTX/XLSX/HTML 等），自动转为 Markdown 创建笔记。"""
+    import os
+    import tempfile
+    from markitdown import MarkItDown
+
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="文件名不能为空")
+
+    ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
+    if ext not in IMPORT_ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"不支持的文件类型: .{ext}，支持: {', '.join(sorted(IMPORT_ALLOWED_EXTENSIONS))}",
+        )
+
+    contents = await file.read()
+    if len(contents) > 50 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="文件过大，最大支持 50MB")
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=f".{ext}") as tmp:
+        tmp.write(contents)
+        tmp_path = tmp.name
+
+    try:
+        md = MarkItDown()
+        result = md.convert(tmp_path)
+        markdown_content = result.text_content or ""
+    except Exception as e:
+        logger.error("markitdown 转换失败: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"文档转换失败: {e}") from e
+    finally:
+        os.unlink(tmp_path)
+
+    title = Path(file.filename).stem
+    parsed_parent_id = None
+    if parent_id:
+        import uuid as _uuid
+        try:
+            parsed_parent_id = _uuid.UUID(parent_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="parent_id 格式无效")
+
+    from app.models.forge import ForgeCreate as _ForgeCreate
+    forge_in = _ForgeCreate(
+        title=title,
+        content=markdown_content,
+        is_folder=False,
+        parent_id=parsed_parent_id,
+    )
+    forge = crud.create_forge(session=session, forge_in=forge_in, owner_id=current_user.id)
+    background_tasks.add_task(_refresh_embedding_bg, forge.id)
+    return forge
+
+
+# 4. 模型路由（必须放在 /{id} 之前！）
 @router.post("/upload-model", response_model=dict)
 async def upload_model(
     *,

@@ -11,9 +11,10 @@ import {
   Split,
   Telescope,
   Trash2,
+  Upload,
   X,
 } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { type ForgePublic, ForgeService, type ForgesPublic } from "@/client"
 import { Button } from "@/components/ui/button"
 import {
@@ -50,6 +51,8 @@ export function ForgeList() {
   const [isResizing, setIsResizing] = useState(false)
   const [showStarGazing, setShowStarGazing] = useState(false)
   const [viewMode, setViewMode] = useState<"edit" | "preview" | "split">("split")
+  const [isImporting, setIsImporting] = useState(false)
+  const importInputRef = useRef<HTMLInputElement>(null)
 
   const toast = useToast()
 
@@ -149,6 +152,47 @@ export function ForgeList() {
     setNewTitle("")
     setNewContent("")
     setIsCreateDialogOpen(true)
+  }
+
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    // reset input so same file can be re-selected
+    e.target.value = ""
+
+    setIsImporting(true)
+    try {
+      const token = localStorage.getItem("access_token")
+      const formData = new FormData()
+      formData.append("file", file)
+
+      const res = await fetch("/api/v1/forge/import-file", {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+      })
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        console.error("Import 422 detail:", JSON.stringify(err))
+        const detail = err?.detail
+        const msg = Array.isArray(detail)
+          ? detail.map((d: any) => `${d.loc?.join(".")}: ${d.msg}`).join("; ")
+          : (typeof detail === "string" ? detail : `导入失败 (${res.status})`)
+        throw new Error(msg)
+      }
+
+      const newForge = (await res.json()) as Forge
+      setForges((prev) => [...prev, newForge])
+      setSelectedForge(newForge)
+      setEditTitle(newForge.title || "")
+      setEditContent(newForge.content || "")
+      toast.showSuccessToast(`已导入：${newForge.title}`)
+    } catch (err) {
+      toast.showErrorToast(err instanceof Error ? err.message : "导入失败")
+    } finally {
+      setIsImporting(false)
+    }
   }
 
   const handleSubmitCreate = async () => {
@@ -366,6 +410,23 @@ export function ForgeList() {
             >
               <FolderPlus className="h-4 w-4" />
             </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => importInputRef.current?.click()}
+              title="Import File (PDF/DOCX/PPTX/XLSX…)"
+              className="h-8 w-8"
+              disabled={isImporting}
+            >
+              <Upload className={`h-4 w-4 ${isImporting ? "animate-pulse" : ""}`} />
+            </Button>
+            <input
+              ref={importInputRef}
+              type="file"
+              accept=".pdf,.docx,.pptx,.xlsx,.xls,.html,.htm,.csv,.json,.xml,.epub,.txt,.md"
+              className="hidden"
+              onChange={handleImportFile}
+            />
           </div>
         </div>
 

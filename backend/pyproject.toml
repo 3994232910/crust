@@ -24,6 +24,7 @@ dependencies = [
     "langchain-core>=0.3.0",
     "httpx>=0.25.1",
     "litellm>=1.48.0",
+    "markitdown[all]>=0.1.0",
 ]
 
 [dependency-groups]
