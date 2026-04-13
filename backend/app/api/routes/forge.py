@@ -1,13 +1,17 @@
+import logging
 import uuid
 import json
 from typing import Any
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, UploadFile, File
+logger = logging.getLogger(__name__)
+
+from fastapi import APIRouter, BackgroundTasks, HTTPException, UploadFile, File
 from fastapi.responses import StreamingResponse
-from sqlmodel import select
+from sqlmodel import Session, select
 
 from app.api.deps import CurrentUser, SessionDep
+from app.core.db import engine
 from app import crud
 from app.models.forge import (
     AnnotateRequest,
@@ -67,8 +71,17 @@ async def _refresh_embedding(forge: Forge, session: SessionDep) -> None:
         session.commit()
     except AIFeatureDisabledError:
         pass  # 功能被禁用或未配置 API Key，静默跳过
-    except Exception:
-        pass  # embedding 失败不阻断 CRUD
+    except Exception as e:
+        logger.warning("embedding 生成失败 forge_id=%s: %s", forge.id, e)
+
+
+async def _refresh_embedding_bg(forge_id: uuid.UUID) -> None:
+    """后台任务版本：自行开 session，响应发出后异步执行。"""
+    with Session(engine) as session:
+        forge = session.get(Forge, forge_id)
+        if forge is None:
+            return
+        await _refresh_embedding(forge, session)
 
 router = APIRouter(prefix="/forge", tags=["forge"])
 
@@ -113,6 +126,7 @@ async def create_forge(
     session: SessionDep,
     forge_in: ForgeCreate,
     current_user: CurrentUser,
+    background_tasks: BackgroundTasks,
 ) -> Any:
     """
     Create new forge.
@@ -125,8 +139,7 @@ async def create_forge(
     forge = crud.create_forge(session=session, forge_in=forge_in, owner_id=current_user.id)
 
     if not forge_in.is_folder:
-        await _refresh_embedding(forge, session)
-        session.refresh(forge)
+        background_tasks.add_task(_refresh_embedding_bg, forge.id)
 
     return forge
 
@@ -276,6 +289,7 @@ async def update_forge(
     id: uuid.UUID,
     forge_in: ForgeUpdate,
     current_user: CurrentUser,
+    background_tasks: BackgroundTasks,
 ) -> Any:
     """
     Update forge.
@@ -291,8 +305,7 @@ async def update_forge(
     forge = crud.update_forge(session=session, db_forge=forge, forge_in=forge_in)
 
     if content_changed and not forge.is_folder:
-        await _refresh_embedding(forge, session)
-        session.refresh(forge)
+        background_tasks.add_task(_refresh_embedding_bg, forge.id)
 
     return forge
 
