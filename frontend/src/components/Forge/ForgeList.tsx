@@ -22,11 +22,14 @@ import { CSS } from "@dnd-kit/utilities"
 import {
   ChevronDown,
   ChevronRight,
+  Download,
   Eye,
   FileText,
   Folder,
   FolderOpen,
   FolderPlus,
+  Globe,
+  Link2,
   Pen,
   Plus,
   Search,
@@ -54,11 +57,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import useToast from "@/hooks/useCustomToast"
 import { AISummaryDialog } from "./AISummaryDialog"
 import { MarkdownEditor } from "./MarkdownEditor"
+import KnowledgeMapView from "./KnowledgeMapView"
 import StarGazingView from "./StarGazingView"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -111,11 +121,13 @@ export function ForgeList() {
   const [sidebarWidth, setSidebarWidth] = useState(256)
   const [isResizing, setIsResizing] = useState(false)
   const [showStarGazing, setShowStarGazing] = useState(false)
+  const [showKnowledgeMap, setShowKnowledgeMap] = useState(false)
   const [viewMode, setViewMode] = useState<"edit" | "preview" | "split">("split")
   const [isImporting, setIsImporting] = useState(false)
   const importInputRef = useRef<HTMLInputElement>(null)
   const [isAISummaryOpen, setIsAISummaryOpen] = useState(false)
   const [isStreaming, setIsStreaming] = useState(false)
+  const [backlinks, setBacklinks] = useState<Forge[]>([])
 
   // DnD state
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -191,6 +203,15 @@ export function ForgeList() {
   }
 
   useEffect(() => { loadForges() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ─── Backlinks ─────────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (!selectedForge || selectedForge.is_folder) { setBacklinks([]); return }
+    ForgeService.getBacklinks({ id: selectedForge.id })
+      .then(res => setBacklinks(res.data as Forge[]))
+      .catch(() => setBacklinks([]))
+  }, [selectedForge?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Order helpers ─────────────────────────────────────────────────────────
 
@@ -568,6 +589,32 @@ export function ForgeList() {
     }
   }
 
+  const handleExport = async (format: string) => {
+    if (!selectedForge || selectedForge.is_folder) return
+    const token = localStorage.getItem("access_token")
+    try {
+      const res = await fetch(`/api/v1/forge/${selectedForge.id}/export?format=${format}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err?.detail ?? `导出失败 (${res.status})`)
+      }
+      const blob = await res.blob()
+      const disposition = res.headers.get("Content-Disposition") ?? ""
+      const match = disposition.match(/filename\*?=(?:UTF-8'')?["']?([^"';\n]+)/i)
+      const filename = match ? decodeURIComponent(match[1]) : `${selectedForge.title || "untitled"}.${format}`
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = filename
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      toast.showErrorToast(err instanceof Error ? err.message : "导出失败")
+    }
+  }
+
   // ─── Sidebar resize ────────────────────────────────────────────────────────
 
   const handleMouseDown = (e: React.MouseEvent) => { e.preventDefault(); setIsResizing(true) }
@@ -611,6 +658,13 @@ export function ForgeList() {
               title="Star Gazing View"
             >
               <Telescope className="h-5 w-5" />
+            </Button>
+            <Button
+              variant="ghost" size="icon"
+              onClick={() => setShowKnowledgeMap(true)}
+              title="Knowledge Map"
+            >
+              <Globe className="h-5 w-5" />
             </Button>
             <Button
               variant="ghost" size="icon" className="h-8 w-8"
@@ -765,6 +819,20 @@ export function ForgeList() {
                     </button>
                   )
                 })}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" title="导出笔记">
+                      <Download className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    {(["md", "txt", "html", "docx", "pdf"] as const).map((fmt) => (
+                      <DropdownMenuItem key={fmt} onClick={() => handleExport(fmt)}>
+                        导出为 .{fmt}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 <Button
                   variant="ghost" size="icon"
                   onClick={() => handleDeleteForge(selectedForge.id)}
@@ -780,6 +848,11 @@ export function ForgeList() {
                 onChange={setEditContent}
                 viewMode={viewMode}
                 autoScroll={isStreaming}
+                forges={forges.filter(f => !f.is_folder)}
+                onNavigate={(id) => {
+                  const target = forges.find(f => f.id === id)
+                  if (target) handleSelectForge(target)
+                }}
               />
             </div>
 
@@ -789,6 +862,28 @@ export function ForgeList() {
               </span>
               <span>Last updated: {new Date(selectedForge.updated_at).toLocaleString()}</span>
             </div>
+
+            {backlinks.length > 0 && (
+              <div className="mt-2 pt-3 border-t">
+                <p className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1">
+                  <Link2 className="h-3 w-3" />
+                  被以下笔记引用
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {backlinks.map(bl => (
+                    <button
+                      key={bl.id}
+                      type="button"
+                      onClick={() => handleSelectForge(bl)}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+                    >
+                      <Link2 className="h-3 w-3" />
+                      {bl.title}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </>
         ) : (
           <div className="flex-1 flex items-center justify-center text-muted-foreground">
@@ -843,6 +938,7 @@ export function ForgeList() {
       </Dialog>
 
       {showStarGazing && <StarGazingView onClose={() => setShowStarGazing(false)} />}
+      {showKnowledgeMap && <KnowledgeMapView onClose={() => setShowKnowledgeMap(false)} />}
 
       <AISummaryDialog
         open={isAISummaryOpen}

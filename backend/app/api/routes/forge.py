@@ -84,6 +84,13 @@ async def _refresh_embedding_bg(forge_id: uuid.UUID) -> None:
             return
         await _refresh_embedding(forge, session)
 
+
+def _sync_links_bg(forge_id: uuid.UUID, owner_id: uuid.UUID, content: str | None) -> None:
+    """后台任务：解析 [[title]] 并同步双链表。"""
+    with Session(engine) as session:
+        crud.sync_forge_links(session=session, source_id=forge_id, owner_id=owner_id, content=content)
+
+
 router = APIRouter(prefix="/forge", tags=["forge"])
 
 
@@ -141,6 +148,8 @@ async def create_forge(
 
     if not forge_in.is_folder:
         background_tasks.add_task(_refresh_embedding_bg, forge.id)
+        if forge_in.content:
+            background_tasks.add_task(_sync_links_bg, forge.id, current_user.id, forge_in.content)
 
     return forge
 
@@ -224,12 +233,19 @@ async def summarize_forges_stream(
 
         # Save full content to DB using a new session
         full_content = header + full_body
+        source_uuid = uuid.UUID(new_forge_id)
         with Session(engine) as save_session:
-            db_forge = save_session.get(Forge, uuid.UUID(new_forge_id))
+            db_forge = save_session.get(Forge, source_uuid)
             if db_forge:
                 db_forge.content = full_content
                 save_session.add(db_forge)
                 save_session.commit()
+                crud.sync_forge_links(
+                    session=save_session,
+                    source_id=source_uuid,
+                    owner_id=current_user.id,
+                    content=full_content,
+                )
 
         yield f"data: {json.dumps({'type': 'done', 'forge_id': new_forge_id}, ensure_ascii=False)}\n\n"
 
@@ -345,7 +361,180 @@ async def import_file_as_forge(
     return forge
 
 
-# 4. 模型路由（必须放在 /{id} 之前！）
+# 4. 知识地图路由（必须放在 /{id} 之前！）
+@router.post("/refresh-embeddings", response_model=dict)
+async def refresh_all_embeddings(
+    session: SessionDep,
+    current_user: CurrentUser,
+    background_tasks: BackgroundTasks,
+) -> Any:
+    """为当前用户所有尚未生成向量的笔记触发向量化（后台异步执行）。"""
+    forges = crud.get_forges(session=session, owner_id=current_user.id, skip=0, limit=10000)
+    pending = [f for f in forges if not f.is_folder and f.embedding is None]
+    for f in pending:
+        background_tasks.add_task(_refresh_embedding_bg, f.id)
+    return {
+        "queued": len(pending),
+        "message": f"已触发 {len(pending)} 条笔记的向量化，后台处理中…",
+    }
+
+
+@router.get("/knowledge-map")
+async def get_knowledge_map(
+    session: SessionDep,
+    current_user: CurrentUser,
+) -> Any:
+    """将用户所有已向量化的笔记降维为 3D 知识地图数据。
+
+    流程：笔记 embedding → UMAP 2D 降维 → KDE 密度地形 → KMeans 聚类 → AI 主题标注
+    返回地形网格、散点坐标和聚类标签，前端用 Three.js 渲染 3D 地图。
+    """
+    import asyncio
+
+    forges = crud.get_forges(session=session, owner_id=current_user.id, skip=0, limit=10000)
+    notes_only = [f for f in forges if not f.is_folder]
+    forges_with_emb = [f for f in notes_only if f.embedding is not None]
+
+    if len(forges_with_emb) < 2:
+        return {
+            "nodes": [],
+            "terrain": {"grid_x": [], "grid_y": [], "grid_z": []},
+            "clusters": [],
+        }
+
+    def _compute() -> dict:  # type: ignore[return]
+        import numpy as np
+        import umap as umap_lib
+        from scipy.stats import gaussian_kde
+        from sklearn.cluster import KMeans
+
+        embeddings = np.array([f.embedding for f in forges_with_emb], dtype=np.float32)
+        n = len(embeddings)
+
+        # UMAP 2D 降维
+        n_neighbors = min(15, n - 1)
+        reducer = umap_lib.UMAP(
+            n_components=2, random_state=42, n_neighbors=n_neighbors, min_dist=0.1
+        )
+        coords_2d = reducer.fit_transform(embeddings)
+        raw_x, raw_y = coords_2d[:, 0], coords_2d[:, 1]
+
+        # 归一化到 [-15, 15]，保持纵横比
+        x_center = (raw_x.min() + raw_x.max()) / 2
+        y_center = (raw_y.min() + raw_y.max()) / 2
+        half_range = max(raw_x.max() - raw_x.min(), raw_y.max() - raw_y.min(), 1e-6) / 2
+        scale = 15.0
+        x = (raw_x - x_center) / half_range * scale
+        y = (raw_y - y_center) / half_range * scale
+
+        # KDE 密度地形（60×60 网格）
+        kde = gaussian_kde(np.vstack([x, y]))
+        margin = 2.0
+        x_min, x_max = float(x.min()) - margin, float(x.max()) + margin
+        y_min, y_max = float(y.min()) - margin, float(y.max()) + margin
+        grid_res = 60
+        xx, yy = np.meshgrid(
+            np.linspace(x_min, x_max, grid_res),
+            np.linspace(y_min, y_max, grid_res),
+        )
+        z_raw = kde(np.vstack([xx.ravel(), yy.ravel()])).reshape(xx.shape)
+        z_global_min, z_global_max = float(z_raw.min()), float(z_raw.max())
+        z_range = max(z_global_max - z_global_min, 1e-10)
+        zz = (z_raw - z_global_min) / z_range * 10.0  # 归一化到 0-10
+
+        # 散点 Z 高度
+        z_scatter_raw = kde(np.vstack([x, y]))
+        z_scatter = (z_scatter_raw - z_global_min) / z_range * 10.0
+
+        # KMeans 聚类
+        n_clusters = min(max(2, n // 8), 8)
+        kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init="auto")
+        cluster_labels = kmeans.fit_predict(embeddings)
+
+        # 构建节点
+        nodes = [
+            {
+                "id": str(forges_with_emb[i].id),
+                "title": forges_with_emb[i].title or "无标题",
+                "content": (forges_with_emb[i].content or "")[:300],
+                "x": float(x[i]),
+                "y": float(y[i]),
+                "z": float(z_scatter[i]),
+                "cluster_id": int(cluster_labels[i]),
+            }
+            for i in range(n)
+        ]
+
+        # 各簇山峰（该簇中 z 最高的节点）
+        clusters_raw = []
+        for cid in range(n_clusters):
+            indices = [i for i in range(n) if cluster_labels[i] == cid]
+            if not indices:
+                continue
+            peak = max(indices, key=lambda i: z_scatter[i])
+            clusters_raw.append({
+                "id": cid,
+                "label": f"主题{cid + 1}",
+                "peak_x": float(x[peak]),
+                "peak_y": float(y[peak]),
+                "peak_z": float(z_scatter[peak]),
+                "titles": [nodes[i]["title"] for i in indices[:5]],
+            })
+
+        return {
+            "nodes": nodes,
+            "terrain": {
+                "grid_x": xx.tolist(),
+                "grid_y": yy.tolist(),
+                "grid_z": zz.tolist(),
+            },
+            "clusters_raw": clusters_raw,
+        }
+
+    map_data = await asyncio.to_thread(_compute)
+
+    # AI 为每个簇生成主题标签（失败时保留默认标签）
+    clusters = []
+    for c in map_data["clusters_raw"]:
+        label = c["label"]
+        try:
+            titles_str = "、".join(c["titles"])
+            resp = await ai_client.chat(
+                ChatRequest(
+                    messages=[
+                        ChatMessage(
+                            role="system",
+                            content="你是知识图谱专家。只输出 2-5 个字的主题词，不加任何标点或解释。",
+                        ),
+                        ChatMessage(
+                            role="user",
+                            content=f"以下笔记标题属于同一知识簇：{titles_str}\n请用 2-5 个字概括该簇的主题：",
+                        ),
+                    ],
+                    max_tokens=20,
+                )
+            )
+            label = resp.strip()[:12]
+        except Exception:
+            pass
+        clusters.append(
+            {
+                "id": c["id"],
+                "label": label,
+                "peak_x": c["peak_x"],
+                "peak_y": c["peak_y"],
+                "peak_z": c["peak_z"],
+            }
+        )
+
+    return {
+        "nodes": map_data["nodes"],
+        "terrain": map_data["terrain"],
+        "clusters": clusters,
+    }
+
+
+# 5. 模型路由（必须放在 /{id} 之前！）
 @router.post("/upload-model", response_model=dict)
 async def upload_model(
     *,
@@ -434,7 +623,147 @@ def delete_model(
     file_path.unlink()
     return Message(message="Model deleted successfully")
 
-# 3. 动态 ID 路由（放在最后）
+# 6. 导出路由（必须放在 /{id} 之前！）
+EXPORT_FORMATS = {"md", "txt", "html", "docx", "pdf"}
+
+@router.get("/{id}/export")
+async def export_forge(
+    session: SessionDep,
+    id: uuid.UUID,
+    current_user: CurrentUser,
+    format: str = "md",
+) -> StreamingResponse:
+    """将笔记导出为 md / txt / html / docx / pdf。"""
+    if format not in EXPORT_FORMATS:
+        raise HTTPException(status_code=400, detail=f"不支持的格式: {format}，支持: {', '.join(sorted(EXPORT_FORMATS))}")
+
+    forge = crud.get_forge(session=session, forge_id=id)
+    if not forge:
+        raise HTTPException(status_code=404, detail="Forge not found")
+    if forge.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+    if forge.is_folder:
+        raise HTTPException(status_code=400, detail="文件夹无法导出")
+
+    title = forge.title or "untitled"
+    content = forge.content or ""
+    safe_title = "".join(c for c in title if c.isalnum() or c in " _-（）()[]【】").strip() or "untitled"
+
+    if format == "md":
+        data = content.encode("utf-8")
+        media_type = "text/markdown; charset=utf-8"
+        filename = f"{safe_title}.md"
+        return StreamingResponse(
+            iter([data]),
+            media_type=media_type,
+            headers={"Content-Disposition": f'attachment; filename*=UTF-8\'\'{_quote(filename)}'},
+        )
+
+    if format == "txt":
+        import re
+        txt = re.sub(r"#{1,6}\s*", "", content)
+        txt = re.sub(r"\*\*(.+?)\*\*", r"\1", txt)
+        txt = re.sub(r"\*(.+?)\*", r"\1", txt)
+        txt = re.sub(r"`{1,3}[^`]*`{1,3}", "", txt)
+        txt = re.sub(r"!\[.*?\]\(.*?\)", "", txt)
+        txt = re.sub(r"\[(.+?)\]\(.*?\)", r"\1", txt)
+        txt = re.sub(r"^\s*[-*>|]\s*", "", txt, flags=re.MULTILINE)
+        data = txt.encode("utf-8")
+        filename = f"{safe_title}.txt"
+        return StreamingResponse(
+            iter([data]),
+            media_type="text/plain; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename*=UTF-8\'\'{_quote(filename)}'},
+        )
+
+    if format == "html":
+        import markdown as md_lib
+        body = md_lib.markdown(content, extensions=["tables", "fenced_code", "toc"])
+        html = f"""<!DOCTYPE html>
+<html lang="zh"><head><meta charset="utf-8">
+<title>{title}</title>
+<style>body{{font-family:sans-serif;max-width:800px;margin:2em auto;line-height:1.7}}
+pre{{background:#f5f5f5;padding:1em;overflow:auto}}code{{font-size:.9em}}</style>
+</head><body>{body}</body></html>"""
+        data = html.encode("utf-8")
+        filename = f"{safe_title}.html"
+        return StreamingResponse(
+            iter([data]),
+            media_type="text/html; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename*=UTF-8\'\'{_quote(filename)}'},
+        )
+
+    if format == "docx":
+        import io
+        import markdown as md_lib
+        from docx import Document
+        from docx.shared import Pt
+        doc = Document()
+        doc.add_heading(title, level=0)
+        for line in content.splitlines():
+            stripped = line.lstrip()
+            if stripped.startswith("# "):
+                doc.add_heading(stripped[2:], level=1)
+            elif stripped.startswith("## "):
+                doc.add_heading(stripped[3:], level=2)
+            elif stripped.startswith("### "):
+                doc.add_heading(stripped[4:], level=3)
+            elif stripped == "":
+                doc.add_paragraph("")
+            else:
+                p = doc.add_paragraph()
+                # 处理粗体 **text**
+                import re
+                parts = re.split(r"\*\*(.+?)\*\*", stripped)
+                bold = False
+                for part in parts:
+                    run = p.add_run(part)
+                    run.bold = bold
+                    bold = not bold
+        buf = io.BytesIO()
+        doc.save(buf)
+        buf.seek(0)
+        filename = f"{safe_title}.docx"
+        return StreamingResponse(
+            buf,
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            headers={"Content-Disposition": f'attachment; filename*=UTF-8\'\'{_quote(filename)}'},
+        )
+
+    if format == "pdf":
+        import io
+        import markdown as md_lib
+        from weasyprint import HTML as WeasyprintHTML
+        body = md_lib.markdown(content, extensions=["tables", "fenced_code"])
+        html = f"""<!DOCTYPE html>
+<html lang="zh"><head><meta charset="utf-8">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC&display=swap');
+body{{font-family:'Noto Sans SC',sans-serif;max-width:700px;margin:2em auto;line-height:1.8;font-size:13pt}}
+h1,h2,h3{{margin-top:1.2em}}pre{{background:#f5f5f5;padding:.8em;white-space:pre-wrap}}
+code{{font-size:.85em}}table{{border-collapse:collapse;width:100%}}
+th,td{{border:1px solid #ccc;padding:.4em .8em}}
+</style></head><body><h1>{title}</h1>{body}</body></html>"""
+        buf = io.BytesIO()
+        WeasyprintHTML(string=html).write_pdf(buf)
+        buf.seek(0)
+        filename = f"{safe_title}.pdf"
+        return StreamingResponse(
+            buf,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename*=UTF-8\'\'{_quote(filename)}'},
+        )
+
+    raise HTTPException(status_code=400, detail="未知格式")  # unreachable
+
+
+def _quote(s: str) -> str:
+    """对文件名做 RFC 5987 百分号编码。"""
+    from urllib.parse import quote
+    return quote(s, safe="")
+
+
+# 7. 动态 ID 路由（放在最后）
 @router.get("/{id}", response_model=ForgePublic)
 def read_forge(
     session: SessionDep,
@@ -474,8 +803,25 @@ async def update_forge(
 
     if content_changed and not forge.is_folder:
         background_tasks.add_task(_refresh_embedding_bg, forge.id)
+        background_tasks.add_task(_sync_links_bg, forge.id, forge.owner_id, forge.content)
 
     return forge
+
+
+@router.get("/{id}/backlinks", response_model=ForgesPublic)
+def get_forge_backlinks(
+    session: SessionDep,
+    id: uuid.UUID,
+    current_user: CurrentUser,
+) -> Any:
+    """返回所有通过 [[title]] 引用了此笔记的笔记（反向链接）。"""
+    forge = crud.get_forge(session=session, forge_id=id)
+    if not forge:
+        raise HTTPException(status_code=404, detail="Forge not found")
+    if forge.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+    backlinks = crud.get_backlinks(session=session, forge_id=id, owner_id=current_user.id)
+    return ForgesPublic(data=backlinks, count=len(backlinks))
 
 
 @router.delete("/{id}")

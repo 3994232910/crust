@@ -50,6 +50,13 @@ class Forge(ForgeBase, table=True):
     )
 
 
+class ForgeLink(SQLModel, table=True):
+    """双向链接关联表：source_id 笔记的内容中引用了 target_id 笔记。"""
+    __tablename__ = "forgelink"
+    source_id: uuid.UUID = Field(foreign_key="forge.id", primary_key=True)
+    target_id: uuid.UUID = Field(foreign_key="forge.id", primary_key=True)
+
+
 # ---------------------------------------------------------------------------
 # AI / request-only schemas (no DB table)
 # ---------------------------------------------------------------------------
