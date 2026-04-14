@@ -1,3 +1,4 @@
+import re
 import uuid
 from typing import Any
 
@@ -5,7 +6,7 @@ from sqlmodel import Session, select
 
 from app.core.security import get_password_hash, verify_password
 from app.models import Item, ItemCreate, User, UserCreate, UserUpdate
-from app.models.forge import Forge, ForgeCreate, ForgeUpdate
+from app.models.forge import Forge, ForgeCreate, ForgeLink, ForgeUpdate
 
 
 def create_user(*, session: Session, user_create: UserCreate) -> User:
@@ -121,3 +122,43 @@ def update_forge(
 def delete_forge(*, session: Session, db_forge: Forge) -> None:
     session.delete(db_forge)
     session.commit()
+
+
+def sync_forge_links(
+    *, session: Session, source_id: uuid.UUID, owner_id: uuid.UUID, content: str | None
+) -> None:
+    """解析 content 中的 [[title]] 引用，同步到 forgelink 表。"""
+    # 删除旧链接
+    old_links = session.exec(select(ForgeLink).where(ForgeLink.source_id == source_id)).all()
+    for link in old_links:
+        session.delete(link)
+
+    if not content:
+        session.commit()
+        return
+
+    titles = list(set(re.findall(r"\[\[([^\[\]\n]+)\]\]", content)))
+    for title in titles:
+        target = session.exec(
+            select(Forge).where(
+                Forge.owner_id == owner_id,
+                Forge.title == title,
+                Forge.id != source_id,
+            )
+        ).first()
+        if target:
+            session.add(ForgeLink(source_id=source_id, target_id=target.id))
+
+    session.commit()
+
+
+def get_backlinks(
+    *, session: Session, forge_id: uuid.UUID, owner_id: uuid.UUID
+) -> list[Forge]:
+    """返回所有通过 [[title]] 引用了 forge_id 的笔记（同一用户）。"""
+    statement = (
+        select(Forge)
+        .join(ForgeLink, ForgeLink.source_id == Forge.id)
+        .where(ForgeLink.target_id == forge_id, Forge.owner_id == owner_id)
+    )
+    return list(session.exec(statement).all())

@@ -224,6 +224,7 @@ class AIClient:
             "model": resolved_model,
             "input": texts,
             "api_key": api_key,
+            "encoding_format": "float",  # 显式指定，避免 LiteLLM 传非法值
         }
         if api_base:
             kwargs["api_base"] = api_base

@@ -246,6 +246,12 @@ export type ForgeDeleteForgeData = {
 
 export type ForgeDeleteForgeResponse = (Message);
 
+export type ForgeGetBacklinksData = {
+    id: string;
+};
+
+export type ForgeGetBacklinksResponse = (ForgesPublic);
+
 export type ItemsReadItemsData = {
     limit?: number;
     skip?: number;

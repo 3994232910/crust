@@ -3,7 +3,7 @@
 import type { CancelablePromise } from './core/CancelablePromise';
 import { OpenAPI } from './core/OpenAPI';
 import { request as __request } from './core/request';
-import type { ForgeReadForgesData, ForgeReadForgesResponse, ForgeCreateForgeData, ForgeCreateForgeResponse, ForgeReadForgeData, ForgeReadForgeResponse, ForgeUpdateForgeData, ForgeUpdateForgeResponse, ForgeDeleteForgeData, ForgeDeleteForgeResponse, ItemsReadItemsData, ItemsReadItemsResponse, ItemsCreateItemData, ItemsCreateItemResponse, ItemsReadItemData, ItemsReadItemResponse, ItemsUpdateItemData, ItemsUpdateItemResponse, ItemsDeleteItemData, ItemsDeleteItemResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, PrivateCreateUserData, PrivateCreateUserResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersUploadAvatarData, UsersUploadAvatarResponse, UsersDeleteAvatarResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse } from './types.gen';
+import type { ForgeReadForgesData, ForgeReadForgesResponse, ForgeCreateForgeData, ForgeCreateForgeResponse, ForgeReadForgeData, ForgeReadForgeResponse, ForgeUpdateForgeData, ForgeUpdateForgeResponse, ForgeDeleteForgeData, ForgeDeleteForgeResponse, ForgeGetBacklinksData, ForgeGetBacklinksResponse, ItemsReadItemsData, ItemsReadItemsResponse, ItemsCreateItemData, ItemsCreateItemResponse, ItemsReadItemData, ItemsReadItemResponse, ItemsUpdateItemData, ItemsUpdateItemResponse, ItemsDeleteItemData, ItemsDeleteItemResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, PrivateCreateUserData, PrivateCreateUserResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersUploadAvatarData, UsersUploadAvatarResponse, UsersDeleteAvatarResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse } from './types.gen';
 
 export class ForgeService {
     /**
@@ -106,6 +106,27 @@ export class ForgeService {
         return __request(OpenAPI, {
             method: 'DELETE',
             url: '/api/v1/forge/{id}',
+            path: {
+                id: data.id
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+
+    /**
+     * Get Backlinks
+     * 返回所有通过 [[title]] 引用了此笔记的笔记（反向链接）。
+     * @param data The data for the request.
+     * @param data.id
+     * @returns ForgesPublic Successful Response
+     * @throws ApiError
+     */
+    public static getBacklinks(data: ForgeGetBacklinksData): CancelablePromise<ForgeGetBacklinksResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/forge/{id}/backlinks',
             path: {
                 id: data.id
             },

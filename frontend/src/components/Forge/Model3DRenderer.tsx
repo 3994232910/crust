@@ -76,12 +76,21 @@ class ErrorBoundary extends Component<{ children: ReactNode, onError: () => void
   }
 }
 
-function ModelContent({ path, onClick }: { path: string, onClick?: (partName: string) => void }) {
+function ModelContent({ path, onClick, onLoaded }: { path: string, onClick?: (partName: string) => void, onLoaded?: () => void }) {
   const { scene } = useGLTF(path)
-  
+  const loadedRef = useRef(false)
+
+  useEffect(() => {
+    if (scene && !loadedRef.current) {
+      loadedRef.current = true
+      // 等两帧，确保 Three.js 完成首次渲染后再截图
+      requestAnimationFrame(() => requestAnimationFrame(() => onLoaded?.()))
+    }
+  }, [scene, onLoaded])
+
   return (
-    <primitive 
-      object={scene} 
+    <primitive
+      object={scene}
       onClick={(e: ThreeEvent<MouseEvent>) => {
         e.stopPropagation()
         const partName = e.object.name || 'unknown-part'
@@ -92,14 +101,28 @@ function ModelContent({ path, onClick }: { path: string, onClick?: (partName: st
 }
 
 function ScreenshotCapture({ onCapture, captureTrigger }: { onCapture: (screenshot: string) => void, captureTrigger: number }) {
-  const { gl } = useThree()
+  const { gl, invalidate } = useThree()
+  const pendingCapture = useRef(false)
+  const onCaptureRef = useRef(onCapture)
+  onCaptureRef.current = onCapture
 
   useEffect(() => {
     if (captureTrigger > 0) {
-      const dataURL = gl.domElement.toDataURL('image/jpeg', 0.8)
-      onCapture(dataURL)
+      pendingCapture.current = true
+      invalidate()
     }
-  }, [captureTrigger, gl, onCapture])
+  }, [captureTrigger, invalidate])
+
+  useFrame(() => {
+    if (pendingCapture.current) {
+      pendingCapture.current = false
+      // rAF 确保在当前帧 flush 到屏幕后再读取，避免读到空帧
+      requestAnimationFrame(() => {
+        const dataURL = gl.domElement.toDataURL('image/jpeg', 0.8)
+        onCaptureRef.current(dataURL)
+      })
+    }
+  })
 
   return null
 }
@@ -221,10 +244,13 @@ function useAILightOptimization() {
     setCaptureTrigger(1)
   }, [])
 
+  const requestAIOptimizationRef = useRef(requestAIOptimization)
+  requestAIOptimizationRef.current = requestAIOptimization
+
   const handleScreenshotReady = useCallback((dataURL: string) => {
     captureScreenshot(dataURL)
-    requestAIOptimization(dataURL, optimizationCountRef.current)
-  }, [])
+    requestAIOptimizationRef.current(dataURL, optimizationCountRef.current)
+  }, [captureScreenshot])
 
   const requestAILightAdjustment = async (feedback: string) => {
     setIsOptimizing(true)
@@ -332,10 +358,14 @@ function useAILightOptimization() {
 
 export function Model3DRenderer({ modelPath, onModelClick, initialView }: Model3DRendererProps) {
   const [error, setError] = useState(false)
+  const [contextLost, setContextLost] = useState(false)
   const resolvedModelPath = useMemo(() => resolveModelPath(modelPath), [modelPath])
   const containerRef = useRef<HTMLDivElement>(null)
   const orbitRef = useRef<any>(null)
   const [menuPosition, setMenuPosition] = useState({ x: 50, y: 50 })
+  // 持有最新 setContextLost，供 onCreated 闭包使用
+  const setContextLostRef = useRef(setContextLost)
+  setContextLostRef.current = setContextLost
 
   const {
     lightConfig,
@@ -353,10 +383,6 @@ export function Model3DRenderer({ modelPath, onModelClick, initialView }: Model3
   useEffect(() => {
     console.log('Loading model from:', resolvedModelPath)
     setError(false)
-
-    if (resolvedModelPath) {
-      autoOptimizeOnLoad()
-    }
   }, [resolvedModelPath])
 
   useEffect(() => {
@@ -375,14 +401,14 @@ export function Model3DRenderer({ modelPath, onModelClick, initialView }: Model3
     return () => window.removeEventListener('resize', updatePosition)
   }, [])
 
-  if (error) {
+  if (error || contextLost) {
     return (
       <div className="w-full h-96 border rounded-lg overflow-hidden bg-slate-900 flex items-center justify-center text-muted-foreground">
         <div className="text-center">
-          <p className="text-sm">Failed to load 3D model</p>
-          <p className="text-xs mt-1">{resolvedModelPath}</p>
-          <button 
-            onClick={() => setError(false)}
+          <p className="text-sm">{contextLost ? 'WebGL context lost — GPU 资源不足' : 'Failed to load 3D model'}</p>
+          <p className="text-xs mt-1 opacity-60">{resolvedModelPath}</p>
+          <button
+            onClick={() => { setError(false); setContextLost(false) }}
             className="mt-2 px-3 py-1 text-xs bg-primary text-primary-foreground rounded hover:bg-primary/90"
           >
             Retry
@@ -399,7 +425,19 @@ export function Model3DRenderer({ modelPath, onModelClick, initialView }: Model3
           Loading 3D Model...
         </div>
       }>
-        <Canvas camera={{ position: initialView?.position || [0, 0, 5] }} frameloop="demand" gl={{ powerPreference: 'low-power', antialias: false }}>
+        <Canvas
+          camera={{ position: initialView?.position || [0, 0, 5] }}
+          frameloop="demand"
+          gl={{ powerPreference: 'default', antialias: true }}
+          onCreated={({ gl }) => {
+            // 在 webglcontextlost 事件层面截断死循环：
+            // 若不处理，Three.js 抛错 → R3F remount → 新 Canvas → 立刻再次 lost → 无限循环
+            gl.domElement.addEventListener('webglcontextlost', (e) => {
+              e.preventDefault() // 阻止浏览器自动尝试恢复（避免 Three.js 触发 restore 循环）
+              setContextLostRef.current(true) // 切到错误 UI，Canvas 从 DOM 移除，循环断开
+            }, { once: true })
+          }}
+        >
           <ambientLight intensity={lightConfig.ambient} />
           <hemisphereLight 
             args={[lightConfig.hemisphere.skyColor, lightConfig.hemisphere.groundColor, lightConfig.hemisphere.intensity]} 
@@ -427,6 +465,7 @@ export function Model3DRenderer({ modelPath, onModelClick, initialView }: Model3
             <ModelContent
               path={resolvedModelPath}
               onClick={onModelClick}
+              onLoaded={autoOptimizeOnLoad}
             />
           </ErrorBoundary>
           <OrbitControls
