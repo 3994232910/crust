@@ -1,7 +1,8 @@
-import { Canvas, useThree } from '@react-three/fiber'
+import { Canvas, useThree, useFrame } from '@react-three/fiber'
 import { OrbitControls, useGLTF } from '@react-three/drei'
 import { Suspense, useState, useEffect, useMemo, useRef, useCallback, Component, type ReactNode } from 'react'
 import type { ThreeEvent } from '@react-three/fiber'
+import { Vector3 } from 'three'
 import { OpenAPI } from '@/client'
 import { RadialMenu } from './RadialMenu'
 
@@ -19,11 +20,11 @@ interface LightConfig {
 }
 
 const DEFAULT_LIGHT_CONFIG: LightConfig = {
-  ambient: 0.5,
-  hemisphere: { skyColor: '#ffffff', groundColor: '#444444', intensity: 0.4 },
+  ambient: 1.0,
+  hemisphere: { skyColor: '#ffffff', groundColor: '#888888', intensity: 0.8 },
   directional: [
-    { position: [5, 10, 5], intensity: 1.0, color: '#ffffff' },
-    { position: [-5, 5, -5], intensity: 0.5, color: '#ffeedd' }
+    { position: [5, 10, 5], intensity: 1.5, color: '#ffffff' },
+    { position: [-5, 5, -5], intensity: 0.8, color: '#ffeedd' }
   ],
   environment: 'studio'
 }
@@ -107,8 +108,60 @@ function ModelControls({ lightConfig }: { lightConfig: LightConfig }) {
   const { gl } = useThree()
 
   useEffect(() => {
-    gl.toneMappingExposure = lightConfig.ambient
-  }, [gl, lightConfig.ambient])
+    gl.toneMappingExposure = 1.0
+  }, [gl])
+
+  return null
+}
+
+interface CameraTarget {
+  position: [number, number, number]
+  target: [number, number, number]
+}
+
+function CameraAnimator({
+  target,
+  orbitRef,
+  onDone,
+}: {
+  target: CameraTarget | null
+  orbitRef: React.RefObject<any>
+  onDone: () => void
+}) {
+  const { camera, invalidate } = useThree()
+  const animating = useRef(false)
+
+  useEffect(() => {
+    if (target) {
+      animating.current = true
+      invalidate()
+    }
+  }, [target, invalidate])
+
+  useFrame(() => {
+    if (!animating.current || !target) return
+
+    const destPos = new Vector3(...target.position)
+    const destLook = new Vector3(...target.target)
+
+    camera.position.lerp(destPos, 0.07)
+
+    const controls = orbitRef.current
+    if (controls?.target) {
+      controls.target.lerp(destLook, 0.07)
+      controls.update()
+    }
+
+    const posClose = camera.position.distanceTo(destPos) < 0.05
+    const lookClose = !controls?.target || controls.target.distanceTo(destLook) < 0.05
+
+    if (posClose && lookClose) {
+      animating.current = false
+      onDone()
+    } else {
+      invalidate()
+    }
+  })
 
   return null
 }
@@ -116,9 +169,12 @@ function ModelControls({ lightConfig }: { lightConfig: LightConfig }) {
 function useAILightOptimization() {
   const [lightConfig, setLightConfig] = useState<LightConfig>(DEFAULT_LIGHT_CONFIG)
   const [isOptimizing, setIsOptimizing] = useState(false)
+  const [isOptimizingView, setIsOptimizingView] = useState(false)
   const [screenshot, setScreenshot] = useState<string | null>(null)
   const [captureTrigger, setCaptureTrigger] = useState(0)
+  const [cameraTarget, setCameraTarget] = useState<CameraTarget | null>(null)
   const optimizationCountRef = useRef(0)
+  const currentCameraRef = useRef<CameraTarget>({ position: [5, 5, 5], target: [0, 0, 0] })
 
   const captureScreenshot = useCallback((dataURL: string) => {
     setScreenshot(dataURL)
@@ -203,6 +259,37 @@ function useAILightOptimization() {
     }
   }
 
+  const requestAIViewOptimization = async () => {
+    if (!screenshot) return
+    setIsOptimizingView(true)
+
+    try {
+      const token = localStorage.getItem('access_token')
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ${token}`
+
+      const response = await fetch('/api/v1/forge/ai-optimize-view', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          screenshot,
+          currentCamera: currentCameraRef.current,
+        })
+      })
+
+      if (!response.ok) throw new Error('AI view optimization failed')
+
+      const data = await response.json()
+      if (data.camera) {
+        setCameraTarget(data.camera as CameraTarget)
+      }
+    } catch (error) {
+      console.error('AI view optimization failed:', error)
+    } finally {
+      setIsOptimizingView(false)
+    }
+  }
+
   const handleRadialMenuAction = async (action: string) => {
     const actionMap: Record<string, string> = {
       'brighter': '整体画面太暗了，需要增加亮度',
@@ -218,6 +305,11 @@ function useAILightOptimization() {
       return
     }
 
+    if (action === 'best-view') {
+      await requestAIViewOptimization()
+      return
+    }
+
     const feedback = actionMap[action]
     if (feedback) {
       await requestAILightAdjustment(feedback)
@@ -227,10 +319,14 @@ function useAILightOptimization() {
   return {
     lightConfig,
     isOptimizing,
+    isOptimizingView,
     autoOptimizeOnLoad,
     handleRadialMenuAction,
     handleScreenshotReady,
-    captureTrigger
+    captureTrigger,
+    cameraTarget,
+    clearCameraTarget: () => setCameraTarget(null),
+    currentCameraRef,
   }
 }
 
@@ -238,15 +334,20 @@ export function Model3DRenderer({ modelPath, onModelClick, initialView }: Model3
   const [error, setError] = useState(false)
   const resolvedModelPath = useMemo(() => resolveModelPath(modelPath), [modelPath])
   const containerRef = useRef<HTMLDivElement>(null)
+  const orbitRef = useRef<any>(null)
   const [menuPosition, setMenuPosition] = useState({ x: 50, y: 50 })
 
   const {
     lightConfig,
     isOptimizing,
+    isOptimizingView,
     autoOptimizeOnLoad,
     handleRadialMenuAction,
     handleScreenshotReady,
-    captureTrigger
+    captureTrigger,
+    cameraTarget,
+    clearCameraTarget,
+    currentCameraRef,
   } = useAILightOptimization()
 
   useEffect(() => {
@@ -298,7 +399,7 @@ export function Model3DRenderer({ modelPath, onModelClick, initialView }: Model3
           Loading 3D Model...
         </div>
       }>
-        <Canvas camera={{ position: initialView?.position || [0, 0, 5] }}>
+        <Canvas camera={{ position: initialView?.position || [0, 0, 5] }} frameloop="demand" gl={{ powerPreference: 'low-power', antialias: false }}>
           <ambientLight intensity={lightConfig.ambient} />
           <hemisphereLight 
             args={[lightConfig.hemisphere.skyColor, lightConfig.hemisphere.groundColor, lightConfig.hemisphere.intensity]} 
@@ -313,30 +414,61 @@ export function Model3DRenderer({ modelPath, onModelClick, initialView }: Model3
           ))}
           {/* Environment HDR removed — CDN unreachable in CN; manual lights cover it */}
           <ModelControls lightConfig={lightConfig} />
-          <ScreenshotCapture 
-            onCapture={handleScreenshotReady} 
-            captureTrigger={captureTrigger} 
+          <CameraAnimator
+            target={cameraTarget}
+            orbitRef={orbitRef}
+            onDone={clearCameraTarget}
+          />
+          <ScreenshotCapture
+            onCapture={handleScreenshotReady}
+            captureTrigger={captureTrigger}
           />
           <ErrorBoundary onError={() => setError(true)}>
-            <ModelContent 
-              path={resolvedModelPath} 
+            <ModelContent
+              path={resolvedModelPath}
               onClick={onModelClick}
             />
           </ErrorBoundary>
-          <OrbitControls enablePan enableZoom enableRotate />
+          <OrbitControls
+            ref={orbitRef}
+            enablePan
+            enableZoom
+            enableRotate
+            onChange={() => {
+              if (orbitRef.current) {
+                const cam = orbitRef.current.object
+                currentCameraRef.current = {
+                  position: [cam.position.x, cam.position.y, cam.position.z],
+                  target: [
+                    orbitRef.current.target.x,
+                    orbitRef.current.target.y,
+                    orbitRef.current.target.z,
+                  ],
+                }
+              }
+            }}
+          />
         </Canvas>
       </Suspense>
 
-      <RadialMenu 
+      <RadialMenu
         onSelect={handleRadialMenuAction}
         position={menuPosition}
       />
 
       {isOptimizing && (
-        <div className="absolute top-4 left-4 px-3 py-2 bg-slate-800/90 border border-slate-600 
+        <div className="absolute top-4 left-4 px-3 py-2 bg-slate-800/90 border border-slate-600
           rounded-lg text-xs text-white backdrop-blur-sm flex items-center gap-2">
           <div className="w-3 h-3 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
           AI 优化光照中...
+        </div>
+      )}
+
+      {isOptimizingView && (
+        <div className="absolute top-4 left-4 px-3 py-2 bg-slate-800/90 border border-slate-600
+          rounded-lg text-xs text-white backdrop-blur-sm flex items-center gap-2">
+          <div className="w-3 h-3 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
+          AI 分析最佳视角中...
         </div>
       )}
     </div>

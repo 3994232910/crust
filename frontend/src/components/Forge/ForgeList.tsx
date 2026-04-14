@@ -30,6 +30,7 @@ import {
   Pen,
   Plus,
   Search,
+  Sparkles,
   Split,
   Telescope,
   Trash2,
@@ -56,6 +57,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import useToast from "@/hooks/useCustomToast"
+import { AISummaryDialog } from "./AISummaryDialog"
 import { MarkdownEditor } from "./MarkdownEditor"
 import StarGazingView from "./StarGazingView"
 
@@ -112,6 +114,8 @@ export function ForgeList() {
   const [viewMode, setViewMode] = useState<"edit" | "preview" | "split">("split")
   const [isImporting, setIsImporting] = useState(false)
   const importInputRef = useRef<HTMLInputElement>(null)
+  const [isAISummaryOpen, setIsAISummaryOpen] = useState(false)
+  const [isStreaming, setIsStreaming] = useState(false)
 
   // DnD state
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -436,6 +440,74 @@ export function ForgeList() {
     }
   }
 
+  const startSummaryStream = async (forgeIds: string[], focus: string) => {
+    const token = localStorage.getItem("access_token")
+    let response: Response
+    try {
+      response = await fetch("/api/v1/forge/summarize-stream", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ forge_ids: forgeIds, focus: focus || "" }),
+      })
+    } catch {
+      toast.showErrorToast("连接失败，请重试")
+      return
+    }
+    if (!response.ok) {
+      toast.showErrorToast("AI 服务暂不可用")
+      return
+    }
+
+    const reader = response.body!.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ""
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split("\n")
+      buffer = lines.pop() ?? ""
+
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue
+        const raw = line.slice(6).trim()
+        if (!raw || raw === "[DONE]") continue
+        let data: Record<string, string>
+        try { data = JSON.parse(raw) } catch { continue }
+
+        if (data.type === "init") {
+          const now = new Date().toISOString()
+          const newForge: Forge = {
+            id: data.forge_id,
+            title: data.title,
+            is_folder: false,
+            owner_id: "",
+            parent_id: null,
+            created_at: now,
+            updated_at: now,
+          } as unknown as Forge
+          setForges((prev) => [newForge, ...prev])
+          setSelectedForge(newForge)
+          setEditTitle(data.title)
+          setEditContent(data.header)
+          setIsStreaming(true)
+        } else if (data.type === "chunk") {
+          setEditContent((prev) => prev + data.content)
+        } else if (data.type === "done") {
+          setIsStreaming(false)
+        } else if (data.type === "error") {
+          toast.showErrorToast(data.message || "AI 生成失败")
+          setIsStreaming(false)
+        }
+      }
+    }
+    setIsStreaming(false)
+  }
+
   const handleSubmitCreate = async () => {
     try {
       const titleToUse = newTitle.trim() || (isCreatingFolder ? "nebula" : "nova")
@@ -561,6 +633,13 @@ export function ForgeList() {
               disabled={isImporting}
             >
               <Upload className={`h-4 w-4 ${isImporting ? "animate-pulse" : ""}`} />
+            </Button>
+            <Button
+              variant="ghost" size="icon" className="h-8 w-8"
+              onClick={() => setIsAISummaryOpen(true)}
+              title="AI 知识梳理"
+            >
+              <Sparkles className="h-4 w-4" />
             </Button>
             <input
               ref={importInputRef} type="file"
@@ -700,6 +779,7 @@ export function ForgeList() {
                 content={editContent}
                 onChange={setEditContent}
                 viewMode={viewMode}
+                autoScroll={isStreaming}
               />
             </div>
 
@@ -763,6 +843,13 @@ export function ForgeList() {
       </Dialog>
 
       {showStarGazing && <StarGazingView onClose={() => setShowStarGazing(false)} />}
+
+      <AISummaryDialog
+        open={isAISummaryOpen}
+        onOpenChange={setIsAISummaryOpen}
+        forges={forges}
+        onGenerate={startSummaryStream}
+      />
     </div>
   )
 }
@@ -828,8 +915,8 @@ function SortableTreeItem({
           isDropTarget
             ? "bg-primary/15 ring-1 ring-primary/50 shadow-sm"
             : isSelected
-              ? "bg-accent"
-              : "hover:bg-accent/70",
+              ? "bg-muted text-foreground hover:bg-muted"
+              : "hover:bg-muted/60",
         ].join(" ")}
         onClick={() => {
           if (item.forge.is_folder) {

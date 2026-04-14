@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react"
-import { Wand2, Sun, Moon, Lightbulb, Zap, RefreshCw } from "lucide-react"
+import { Wand2, Sun, Moon, Lightbulb, Zap, RefreshCw, Camera } from "lucide-react"
 
 interface RadialMenuProps {
   onSelect: (action: string) => void
@@ -19,12 +19,13 @@ export function RadialMenu({ onSelect, position = { x: 50, y: 50 } }: RadialMenu
   const menuRef = useRef<HTMLDivElement>(null)
 
   const menuItems: MenuItem[] = [
-    { id: "brighter", label: "更亮", icon: <Sun className="w-4 h-4" />, angle: -90 },
-    { id: "darker", label: "更暗", icon: <Moon className="w-4 h-4" />, angle: -30 },
-    { id: "left-light", label: "左侧补光", icon: <Lightbulb className="w-4 h-4" />, angle: 30 },
-    { id: "right-light", label: "右侧补光", icon: <Lightbulb className="w-4 h-4" />, angle: 90 },
-    { id: "soft-light", label: "柔和光", icon: <Wand2 className="w-4 h-4" />, angle: 150 },
-    { id: "reset", label: "重置", icon: <RefreshCw className="w-4 h-4" />, angle: 210 },
+    { id: "best-view", label: "最佳视角", icon: <Camera className="w-4 h-4" />, angle: -90 },
+    { id: "brighter", label: "更亮", icon: <Sun className="w-4 h-4" />, angle: -39 },
+    { id: "darker", label: "更暗", icon: <Moon className="w-4 h-4" />, angle: 13 },
+    { id: "left-light", label: "左侧补光", icon: <Lightbulb className="w-4 h-4" />, angle: 64 },
+    { id: "right-light", label: "右侧补光", icon: <Lightbulb className="w-4 h-4" />, angle: 116 },
+    { id: "soft-light", label: "柔和光", icon: <Wand2 className="w-4 h-4" />, angle: 167 },
+    { id: "reset", label: "重置", icon: <RefreshCw className="w-4 h-4" />, angle: 218 },
   ]
 
   useEffect(() => {
