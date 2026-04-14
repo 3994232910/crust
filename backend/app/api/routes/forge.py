@@ -28,6 +28,7 @@ from app.models.forge import (
     LightOptimizeRequest,
     ModelInfo,
     SummarizeRequest,
+    ViewOptimizeRequest,
 )
 from app.models import Message
 from app.core.ai_client import ChatMessage, ChatRequest, ai_client, AIFeatureDisabledError
@@ -145,6 +146,96 @@ async def create_forge(
 
 # 2. AI 工作流路由（静态路径，必须在 /{id} 之前）
 
+@router.post("/summarize-stream")
+async def summarize_forges_stream(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    request: SummarizeRequest,
+) -> StreamingResponse:
+    """流式知识梳理：先创建文件，再逐 token 流式返回 AI 内容，结束后保存并建立双向链接。"""
+    from datetime import datetime
+
+    forges = crud.get_forges_by_ids(
+        session=session, forge_ids=request.forge_ids, owner_id=current_user.id
+    )
+    if not forges:
+        raise HTTPException(status_code=404, detail="未找到指定笔记")
+
+    titles_list = ", ".join(f.title or "无标题" for f in forges[:3])
+    if len(forges) > 3:
+        titles_list += f" 等{len(forges)}篇笔记"
+    summary_title = f"知识梳理 - {titles_list}"
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+    header = f"# {summary_title}\n\n> 自动生成于 {timestamp}\n\n"
+
+    forge_in = ForgeCreate(title=summary_title, content=header, is_folder=False)
+    new_forge = crud.create_forge(session=session, forge_in=forge_in, owner_id=current_user.id)
+    new_forge_id = str(new_forge.id)
+    new_forge_title = summary_title
+
+    forge_contents = [
+        {"title": f.title or "", "content": f.content or ""}
+        for f in forges
+    ]
+    focus_hint = f"\n\n请重点关注：{request.focus}" if request.focus else ""
+    nodes_text = "\n\n---\n\n".join(
+        f"### {item['title']}\n{(item['content'] or '')[:1500]}"
+        for item in forge_contents
+    )
+    prompt = (
+        "请对以下多篇笔记进行知识梳理，提炼核心观点、关联关系和可行结论，"
+        "输出结构化的 Markdown 总结报告（不要包含报告标题，直接从正文开始）。"
+        f"{focus_hint}\n\n===== 笔记内容 =====\n\n{nodes_text}"
+    )
+    messages = [
+        ChatMessage(
+            role="system",
+            content="你是专业的知识梳理助手，擅长跨文档提炼核心内容和关联关系。输出结构化 Markdown 报告，不加任何解释性前缀。",
+        ),
+        ChatMessage(role="user", content=prompt),
+    ]
+
+    async def event_stream():
+        init_data = {
+            "type": "init",
+            "forge_id": new_forge_id,
+            "title": new_forge_title,
+            "header": header,
+        }
+        yield f"data: {json.dumps(init_data, ensure_ascii=False)}\n\n"
+
+        full_body = ""
+        try:
+            async for token in ai_client.chat_stream(ChatRequest(messages=messages, max_tokens=3000)):
+                full_body += token
+                yield f"data: {json.dumps({'type': 'chunk', 'content': token}, ensure_ascii=False)}\n\n"
+        except AIFeatureDisabledError as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': e.message}, ensure_ascii=False)}\n\n"
+            return
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': 'AI 生成失败'}, ensure_ascii=False)}\n\n"
+            return
+
+        # Stream the wiki backlinks section
+        for chunk in ["\n\n## 相关笔记\n\n"] + [f"- [[{f.title or '无标题'}]]\n" for f in forges]:
+            full_body += chunk
+            yield f"data: {json.dumps({'type': 'chunk', 'content': chunk}, ensure_ascii=False)}\n\n"
+
+        # Save full content to DB using a new session
+        full_content = header + full_body
+        with Session(engine) as save_session:
+            db_forge = save_session.get(Forge, uuid.UUID(new_forge_id))
+            if db_forge:
+                db_forge.content = full_content
+                save_session.add(db_forge)
+                save_session.commit()
+
+        yield f"data: {json.dumps({'type': 'done', 'forge_id': new_forge_id}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
 @router.post("/summarize", response_model=dict)
 async def summarize_forges(
     *,
@@ -170,11 +261,18 @@ async def summarize_forges(
             "forge_contents": forge_contents,
             "focus": request.focus or "",
             "summary": "",
+            "new_forge_id": None,
+            "session": session,
+            "owner_id": current_user.id,
         })
     except AIFeatureDisabledError as e:
         _handle_ai_error(e)
 
-    return {"summary": result["summary"], "count": len(forges)}
+    return {
+        "summary": result["summary"],
+        "count": len(forges),
+        "new_forge_id": result.get("new_forge_id"),
+    }
 
 
 # 3. 文件导入路由（必须放在 /{id} 之前！）
@@ -774,7 +872,8 @@ async def ai_auto_optimize_light(
 
     try:
         ai_response = await ai_client.analyze_image(request.screenshot, prompt)
-    except HTTPException:
+    except (HTTPException, AIFeatureDisabledError, Exception) as e:
+        logger.error(f"AI auto optimize light failed: {e}")
         return {
             'config': current,
             'iteration': iteration,
@@ -851,7 +950,8 @@ async def ai_adjust_light_with_screenshot(
             ai_response = await ai_client.chat(
                 ChatRequest(messages=[ChatMessage(role="user", content=prompt)])
             )
-    except HTTPException:
+    except (HTTPException, AIFeatureDisabledError, Exception) as e:
+        logger.error(f"AI adjust light with screenshot failed: {e}")
         return {'config': current, 'message': 'AI 调用失败，保持当前配置'}
 
     new_config = parse_light_config(ai_response)
@@ -860,3 +960,68 @@ async def ai_adjust_light_with_screenshot(
         return {'config': current, 'message': 'AI 解析失败，保持当前配置'}
 
     return {'config': new_config, 'message': 'AI 已根据反馈调整光照'}
+
+
+@router.post('/ai-optimize-view', response_model=dict)
+async def ai_optimize_view(
+    *,
+    current_user: CurrentUser,
+    request: ViewOptimizeRequest,
+) -> Any:
+    """AI 分析截图，推荐最佳观察视角。"""
+
+    current = request.currentCamera or {
+        'position': [5, 5, 5],
+        'target': [0, 0, 0]
+    }
+
+    prompt = f"""你是一个3D模型展示专家。分析当前3D模型的渲染截图，推荐能最好展现模型特征的观察视角。
+
+要求：
+1. 视角要能展现模型的主要特征和细节
+2. 模型要完整可见，不被裁剪
+3. 选择有立体感的斜45°左右视角，避免纯正面/侧面
+4. 相机距离要合适，模型占画面60%-80%
+
+当前相机配置：
+{json.dumps(current, ensure_ascii=False)}
+
+只返回JSON，不要其他文字：
+{{
+  "position": [x, y, z],
+  "target": [x, y, z],
+  "reason": "推荐理由（一句话）"
+}}
+
+注意：position 和 target 的每个分量范围约 -20 到 20，根据模型大小合理设置。"""
+
+    try:
+        ai_response = await ai_client.analyze_image(request.screenshot, prompt)
+    except (HTTPException, AIFeatureDisabledError, Exception) as e:
+        logger.error(f"AI optimize view failed: {e}")
+        return {'camera': current, 'message': 'AI 调用失败，保持当前视角'}
+
+    try:
+        import re
+        json_match = re.search(r'\{[\s\S]*\}', ai_response)
+        if not json_match:
+            raise ValueError('No JSON found')
+        data = json.loads(json_match.group())
+
+        pos = data.get('position', current['position'])
+        tgt = data.get('target', current['target'])
+
+        # 校验并夹紧数值
+        def clamp_vec(v: list, lo: float = -20, hi: float = 20) -> list:
+            return [max(lo, min(float(x), hi)) for x in v[:3]]
+
+        camera = {
+            'position': clamp_vec(pos),
+            'target': clamp_vec(tgt),
+        }
+        reason = data.get('reason', '已优化视角')
+        return {'camera': camera, 'message': reason}
+
+    except Exception as e:
+        logger.error(f"AI view parse failed: {e}, response: {ai_response[:200]}")
+        return {'camera': current, 'message': 'AI 解析失败，保持当前视角'}

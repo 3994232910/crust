@@ -114,6 +114,28 @@ export class ForgeService {
             }
         });
     }
+
+    /**
+     * Summarize Forges
+     * 对多篇笔记进行知识梳理，返回结构化总结报告（LangGraph 工作流）。
+     * @param data The data for the request.
+     * @param data.forgeIds List of forge IDs to summarize
+     * @param data.focus Optional focus direction for the summary
+     * @returns { summary: string, count: number } Successful Response
+     * @throws ApiError
+     */
+    public static summarizeForges(data: { forgeIds: string[]; focus?: string }): CancelablePromise<{ summary: string; count: number }> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/forge/summarize',
+            body: { forge_ids: data.forgeIds, focus: data.focus ?? '' },
+            mediaType: 'application/json',
+            errors: {
+                404: 'Not Found',
+                422: 'Validation Error'
+            }
+        });
+    }
 }
 
 export class ItemsService {

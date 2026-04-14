@@ -17,11 +17,23 @@ interface MarkdownEditorProps {
   onChange: (content: string) => void
   viewMode: 'edit' | 'preview' | 'split'
   onModelBind?: (paragraphId: string, modelPath: string, viewParams?: any) => void
+  autoScroll?: boolean
 }
 
-export function MarkdownEditor({ content, onChange, viewMode, onModelBind }: MarkdownEditorProps) {
+export function MarkdownEditor({ content, onChange, viewMode, onModelBind, autoScroll }: MarkdownEditorProps) {
   const [isModelDialogOpen, setIsModelDialogOpen] = useState(false)
   const editorRef = useRef<HTMLTextAreaElement>(null)
+  const previewRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!autoScroll) return
+    if (editorRef.current) {
+      editorRef.current.scrollTop = editorRef.current.scrollHeight
+    }
+    if (previewRef.current) {
+      previewRef.current.scrollTop = previewRef.current.scrollHeight
+    }
+  }, [content, autoScroll])
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -99,7 +111,7 @@ export function MarkdownEditor({ content, onChange, viewMode, onModelBind }: Mar
         )}
 
         {(viewMode === 'preview' || viewMode === 'split') && (
-          <div className={`overflow-y-auto p-6 prose prose-invert max-w-none ${
+          <div ref={previewRef} className={`overflow-y-auto p-6 prose prose-invert max-w-none ${
             viewMode === 'split' ? 'flex-1 w-1/2' : 'flex-1 w-full'
           }`}>
             <ReactMarkdown

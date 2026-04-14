@@ -89,6 +89,11 @@ class LightAdjustWithScreenshotRequest(SQLModel):
     screenshot: str | None = None
 
 
+class ViewOptimizeRequest(SQLModel):
+    screenshot: str
+    currentCamera: dict | None = None  # {position: [x,y,z], target: [x,y,z]}
+
+
 class SummarizeRequest(SQLModel):
     forge_ids: list[uuid.UUID]
     focus: str | None = None
