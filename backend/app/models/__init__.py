@@ -64,6 +64,15 @@ from app.models.dashboard import (
     UserEvolutionStats,
     WeekPlanDay,
 )
+from app.models.community import (
+    CommunityPost,
+    CommunityPostCreate,
+    CommunityPostUpdate,
+    CommunityPostPublic,
+    CommunityPostsPublic,
+    UserFollow,
+    PostFavorite,
+)
 from app.models.common import (
     Message,
     Token,
@@ -124,6 +133,14 @@ __all__ = [
     "UserEvolution",
     "UserEvolutionStats",
     "WeekPlanDay",
+    # Community
+    "CommunityPost",
+    "CommunityPostCreate",
+    "CommunityPostUpdate",
+    "CommunityPostPublic",
+    "CommunityPostsPublic",
+    "UserFollow",
+    "PostFavorite",
     # Common
     "Message",
     "Token",

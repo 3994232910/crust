@@ -17,6 +17,7 @@ class ForgeBase(SQLModel):
     content: str | None = None
     is_folder: bool = False
     parent_id: uuid.UUID | None = None
+    published_to_community: bool = False
 
 
 class ForgeCreate(ForgeBase):
