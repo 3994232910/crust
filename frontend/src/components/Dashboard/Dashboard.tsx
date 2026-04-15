@@ -3,7 +3,7 @@ import { useTheme } from 'next-themes'
 import { DashboardShell } from '../layout/DashboardShell'
 import { DashboardHeader } from '../layout/DashboardHeader'
 import { LeftRail } from '../layout/LeftRail'
-import { CenterTop } from '../layout/CenterTop'
+import KnowledgeMapView from '../Forge/KnowledgeMapView'
 import { CenterBottom } from '../layout/CenterBottom'
 import { RightPanel } from '../layout/RightPanel'
 import type { ActivityData, DashboardData, DashboardLog, DashboardTask, EvolutionStage, KanbanData, WeekPlanDay } from '@/types/dashboard'
@@ -159,7 +159,7 @@ export function DashboardPage() {
           trendData={trendData}
         />
       }
-      centerTop={<CenterTop stage={currentStage} />}
+      centerTop={<div className="h-96 w-full"><KnowledgeMapView embedded /></div>}
       centerBottom={<CenterBottom weekPlan={weekPlan} kanban={kanban} />}
       rightPanel={
         <RightPanel
