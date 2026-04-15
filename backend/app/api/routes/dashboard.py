@@ -20,6 +20,7 @@ from app.models.dashboard import (
     TaskCreate,
     TaskPublic,
     TaskUpdate,
+    UserActivityPing,
     UserEvolution,
     UserEvolutionStats,
     WeekPlanDay,
@@ -292,22 +293,32 @@ def get_week_plan(session: SessionDep, current_user: CurrentUser) -> List[WeekPl
 @router.get("/activity", response_model=ActivityData)
 def get_activity(session: SessionDep, current_user: CurrentUser) -> ActivityData:
     today = datetime.now(timezone.utc).date()
-    tasks = _get_tasks(session, current_user.id)
-    logs = _get_logs(session, current_user.id)
+    ninety_days_ago = datetime.now(timezone.utc) - timedelta(days=90)
 
+    pings = list(session.exec(
+        select(UserActivityPing)
+        .where(UserActivityPing.user_id == current_user.id)
+        .where(UserActivityPing.pinged_at >= ninety_days_ago)
+    ).all())
+
+    # Group ping counts by date
+    ping_counts: dict[date_type, int] = {}
+    for p in pings:
+        d = p.pinged_at.date()
+        ping_counts[d] = ping_counts.get(d, 0) + 1
+
+    # Heatmap: 90 days, count = number of pings that day (any usage = visible dot)
     heatmap = []
     for i in range(90):
         day = today - timedelta(days=i)
-        count = sum(1 for lg in logs if lg.created_at.date() == day)
-        count += sum(1 for t in tasks if t.completed and t.updated_at.date() == day)
-        heatmap.append(HeatmapEntry(date=str(day), count=count))
+        heatmap.append(HeatmapEntry(date=str(day), count=ping_counts.get(day, 0)))
 
+    # Trend: 30 days, value = active minutes (pings × 5 min per ping)
     trend = []
     for i in range(30):
         day = today - timedelta(days=i)
-        score = sum(lg.impact * 10 for lg in logs if lg.created_at.date() == day)
-        score += sum(t.energy for t in tasks if t.completed and t.updated_at.date() == day)
-        trend.append(int(score))
+        minutes = ping_counts.get(day, 0) * 5
+        trend.append(minutes)
 
     return ActivityData(heatmap=heatmap, trend=trend)
 

@@ -2,7 +2,8 @@ import { Canvas, useThree, useFrame } from '@react-three/fiber'
 import { OrbitControls, useGLTF } from '@react-three/drei'
 import { Suspense, useState, useEffect, useMemo, useRef, useCallback, Component, type ReactNode } from 'react'
 import type { ThreeEvent } from '@react-three/fiber'
-import { Vector3 } from 'three'
+import { Vector3, Box3 } from 'three'
+import type { Group } from 'three'
 import { OpenAPI } from '@/client'
 import { RadialMenu } from './RadialMenu'
 
@@ -10,6 +11,29 @@ interface Model3DRendererProps {
   modelPath: string
   onModelClick?: (partName: string) => void
   initialView?: { position: [number, number, number], target: [number, number, number] }
+}
+
+// ─── Per-model view persistence ───────────────────────────────────────────────
+function getViewStorageKey(modelPath: string): string {
+  return 'forge_model_view_' + modelPath.replace(/[^a-zA-Z0-9._-]/g, '_')
+}
+
+function loadSavedView(modelPath: string): CameraTarget | null {
+  try {
+    const raw = localStorage.getItem(getViewStorageKey(modelPath))
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    if (Array.isArray(parsed?.position) && Array.isArray(parsed?.target)) {
+      return parsed as CameraTarget
+    }
+    return null
+  } catch { return null }
+}
+
+function saveView(modelPath: string, view: CameraTarget): void {
+  try {
+    localStorage.setItem(getViewStorageKey(modelPath), JSON.stringify(view))
+  } catch {}
 }
 
 interface LightConfig {
@@ -76,13 +100,21 @@ class ErrorBoundary extends Component<{ children: ReactNode, onError: () => void
   }
 }
 
-function ModelContent({ path, onClick, onLoaded }: { path: string, onClick?: (partName: string) => void, onLoaded?: () => void }) {
+function ModelContent({ path, onClick, onLoaded, onSceneReady }: {
+  path: string
+  onClick?: (partName: string) => void
+  onLoaded?: () => void
+  onSceneReady?: (scene: Group) => void
+}) {
   const { scene } = useGLTF(path)
   const loadedRef = useRef(false)
+  const onSceneReadyRef = useRef(onSceneReady)
+  onSceneReadyRef.current = onSceneReady
 
   useEffect(() => {
     if (scene && !loadedRef.current) {
       loadedRef.current = true
+      onSceneReadyRef.current?.(scene as unknown as Group)
       // 等两帧，确保 Three.js 完成首次渲染后再截图
       requestAnimationFrame(() => requestAnimationFrame(() => onLoaded?.()))
     }
@@ -127,7 +159,7 @@ function ScreenshotCapture({ onCapture, captureTrigger }: { onCapture: (screensh
   return null
 }
 
-function ModelControls({ lightConfig }: { lightConfig: LightConfig }) {
+function ModelControls({ lightConfig: _lightConfig }: { lightConfig: LightConfig }) {
   const { gl } = useThree()
 
   useEffect(() => {
@@ -189,7 +221,85 @@ function CameraAnimator({
   return null
 }
 
-function useAILightOptimization() {
+// ─── Applies a saved view (position + orbit target) once OrbitControls is ready
+function SavedViewApplier({
+  view,
+  orbitRef,
+  onApplied,
+}: {
+  view: CameraTarget
+  orbitRef: React.RefObject<any>
+  onApplied: () => void
+}) {
+  const { camera, invalidate } = useThree()
+  const applied = useRef(false)
+  const onAppliedRef = useRef(onApplied)
+  onAppliedRef.current = onApplied
+
+  // useFrame guarantees OrbitControls ref is already set
+  useFrame(() => {
+    if (applied.current || !orbitRef.current?.target) return
+    applied.current = true
+    camera.position.set(...view.position)
+    orbitRef.current.target.set(...view.target)
+    orbitRef.current.update()
+    invalidate()
+    onAppliedRef.current()
+  })
+
+  return null
+}
+
+// ─── Fits camera to model bounding box with a 45° elevated angle (first load)
+function BBoxCameraFitter({
+  scene,
+  orbitRef,
+  onFitted,
+}: {
+  scene: Group | null
+  orbitRef: React.RefObject<any>
+  onFitted: (view: CameraTarget) => void
+}) {
+  const { camera, invalidate } = useThree()
+  const fitted = useRef(false)
+  const onFittedRef = useRef(onFitted)
+  onFittedRef.current = onFitted
+
+  useFrame(() => {
+    if (fitted.current || !scene || !orbitRef.current?.target) return
+    fitted.current = true
+
+    const box = new Box3().setFromObject(scene)
+    if (box.isEmpty()) return
+
+    const center = new Vector3()
+    box.getCenter(center)
+    const size = new Vector3()
+    box.getSize(size)
+
+    // Distance based on largest dimension so any scale looks right
+    const maxDim = Math.max(size.x, size.y, size.z)
+    const distance = Math.max(maxDim * 2.2, 0.5)
+
+    // Front-right, slightly elevated — reveals depth nicely
+    const dir = new Vector3(1, 0.75, 1).normalize()
+    const newPos = center.clone().addScaledVector(dir, distance)
+
+    camera.position.copy(newPos)
+    orbitRef.current.target.copy(center)
+    orbitRef.current.update()
+    invalidate()
+
+    onFittedRef.current({
+      position: [newPos.x, newPos.y, newPos.z],
+      target: [center.x, center.y, center.z],
+    })
+  })
+
+  return null
+}
+
+function useAILightOptimization(hasSavedViewRef: React.RefObject<boolean>) {
   const [lightConfig, setLightConfig] = useState<LightConfig>(DEFAULT_LIGHT_CONFIG)
   const [isOptimizing, setIsOptimizing] = useState(false)
   const [isOptimizingView, setIsOptimizingView] = useState(false)
@@ -198,6 +308,8 @@ function useAILightOptimization() {
   const [cameraTarget, setCameraTarget] = useState<CameraTarget | null>(null)
   const optimizationCountRef = useRef(0)
   const currentCameraRef = useRef<CameraTarget>({ position: [5, 5, 5], target: [0, 0, 0] })
+  // Stub ref populated after requestAIViewOptimization is defined below
+  const requestAIViewOptimizationRef = useRef<(s?: string) => Promise<void>>(async () => {})
 
   const captureScreenshot = useCallback((dataURL: string) => {
     setScreenshot(dataURL)
@@ -250,7 +362,11 @@ function useAILightOptimization() {
   const handleScreenshotReady = useCallback((dataURL: string) => {
     captureScreenshot(dataURL)
     requestAIOptimizationRef.current(dataURL, optimizationCountRef.current)
-  }, [captureScreenshot])
+    // Auto-optimize view on first load only if user hasn't set a custom view
+    if (!hasSavedViewRef.current) {
+      requestAIViewOptimizationRef.current(dataURL)
+    }
+  }, [captureScreenshot, hasSavedViewRef])
 
   const requestAILightAdjustment = async (feedback: string) => {
     setIsOptimizing(true)
@@ -285,8 +401,9 @@ function useAILightOptimization() {
     }
   }
 
-  const requestAIViewOptimization = async () => {
-    if (!screenshot) return
+  const requestAIViewOptimization = async (screenshotOverride?: string) => {
+    const screenshotToUse = screenshotOverride ?? screenshot
+    if (!screenshotToUse) return
     setIsOptimizingView(true)
 
     try {
@@ -298,7 +415,7 @@ function useAILightOptimization() {
         method: 'POST',
         headers,
         body: JSON.stringify({
-          screenshot,
+          screenshot: screenshotToUse,
           currentCamera: currentCameraRef.current,
         })
       })
@@ -315,6 +432,7 @@ function useAILightOptimization() {
       setIsOptimizingView(false)
     }
   }
+  requestAIViewOptimizationRef.current = requestAIViewOptimization
 
   const handleRadialMenuAction = async (action: string) => {
     const actionMap: Record<string, string> = {
@@ -367,6 +485,15 @@ export function Model3DRenderer({ modelPath, onModelClick, initialView }: Model3
   const setContextLostRef = useRef(setContextLost)
   setContextLostRef.current = setContextLost
 
+  // Per-model view memory
+  const savedView = useMemo(() => loadSavedView(resolvedModelPath), [resolvedModelPath])
+  const [userHasSavedView, setUserHasSavedView] = useState(() => savedView !== null)
+  const userHasSavedViewRef = useRef(userHasSavedView)
+  userHasSavedViewRef.current = userHasSavedView
+
+  // Scene for bbox fitting (set by ModelContent once loaded)
+  const [loadedScene, setLoadedScene] = useState<Group | null>(null)
+
   const {
     lightConfig,
     isOptimizing,
@@ -378,7 +505,7 @@ export function Model3DRenderer({ modelPath, onModelClick, initialView }: Model3
     cameraTarget,
     clearCameraTarget,
     currentCameraRef,
-  } = useAILightOptimization()
+  } = useAILightOptimization(userHasSavedViewRef)
 
   useEffect(() => {
     console.log('Loading model from:', resolvedModelPath)
@@ -426,7 +553,7 @@ export function Model3DRenderer({ modelPath, onModelClick, initialView }: Model3
         </div>
       }>
         <Canvas
-          camera={{ position: initialView?.position || [0, 0, 5] }}
+          camera={{ position: savedView?.position ?? initialView?.position ?? [0, 0, 5] }}
           frameloop="demand"
           gl={{ powerPreference: 'default', antialias: true }}
           onCreated={({ gl }) => {
@@ -439,8 +566,8 @@ export function Model3DRenderer({ modelPath, onModelClick, initialView }: Model3
           }}
         >
           <ambientLight intensity={lightConfig.ambient} />
-          <hemisphereLight 
-            args={[lightConfig.hemisphere.skyColor, lightConfig.hemisphere.groundColor, lightConfig.hemisphere.intensity]} 
+          <hemisphereLight
+            args={[lightConfig.hemisphere.skyColor, lightConfig.hemisphere.groundColor, lightConfig.hemisphere.intensity]}
           />
           {lightConfig.directional.map((light, index) => (
             <directionalLight
@@ -457,6 +584,20 @@ export function Model3DRenderer({ modelPath, onModelClick, initialView }: Model3
             orbitRef={orbitRef}
             onDone={clearCameraTarget}
           />
+          {/* Apply saved view (sets orbit target) or fit to bounding box on first load */}
+          {savedView ? (
+            <SavedViewApplier
+              view={savedView}
+              orbitRef={orbitRef}
+              onApplied={() => { currentCameraRef.current = savedView }}
+            />
+          ) : (
+            <BBoxCameraFitter
+              scene={loadedScene}
+              orbitRef={orbitRef}
+              onFitted={(view) => { currentCameraRef.current = view }}
+            />
+          )}
           <ScreenshotCapture
             onCapture={handleScreenshotReady}
             captureTrigger={captureTrigger}
@@ -466,6 +607,7 @@ export function Model3DRenderer({ modelPath, onModelClick, initialView }: Model3
               path={resolvedModelPath}
               onClick={onModelClick}
               onLoaded={autoOptimizeOnLoad}
+              onSceneReady={setLoadedScene}
             />
           </ErrorBoundary>
           <OrbitControls
@@ -484,6 +626,23 @@ export function Model3DRenderer({ modelPath, onModelClick, initialView }: Model3
                     orbitRef.current.target.z,
                   ],
                 }
+              }
+            }}
+            onEnd={() => {
+              // Save view only on genuine user gesture (mouse/touch release),
+              // not during programmatic CameraAnimator lerp which never fires onEnd
+              if (orbitRef.current) {
+                const cam = orbitRef.current.object
+                const view: CameraTarget = {
+                  position: [cam.position.x, cam.position.y, cam.position.z],
+                  target: [
+                    orbitRef.current.target.x,
+                    orbitRef.current.target.y,
+                    orbitRef.current.target.z,
+                  ],
+                }
+                saveView(resolvedModelPath, view)
+                setUserHasSavedView(true)
               }
             }}
           />
