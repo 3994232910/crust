@@ -28,7 +28,6 @@ import {
   Folder,
   FolderOpen,
   FolderPlus,
-  Globe,
   Link2,
   Pen,
   Plus,
@@ -68,7 +67,6 @@ import { Label } from "@/components/ui/label"
 import useToast from "@/hooks/useCustomToast"
 import { AISummaryDialog } from "./AISummaryDialog"
 import { MarkdownEditor } from "./MarkdownEditor"
-import KnowledgeMapView from "./KnowledgeMapView"
 import StarGazingView from "./StarGazingView"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -121,7 +119,6 @@ export function ForgeList() {
   const [sidebarWidth, setSidebarWidth] = useState(256)
   const [isResizing, setIsResizing] = useState(false)
   const [showStarGazing, setShowStarGazing] = useState(false)
-  const [showKnowledgeMap, setShowKnowledgeMap] = useState(false)
   const [viewMode, setViewMode] = useState<"edit" | "preview" | "split">("split")
   const [isImporting, setIsImporting] = useState(false)
   const importInputRef = useRef<HTMLInputElement>(null)
@@ -660,13 +657,6 @@ export function ForgeList() {
               <Telescope className="h-5 w-5" />
             </Button>
             <Button
-              variant="ghost" size="icon"
-              onClick={() => setShowKnowledgeMap(true)}
-              title="Knowledge Map"
-            >
-              <Globe className="h-5 w-5" />
-            </Button>
-            <Button
               variant="ghost" size="icon" className="h-8 w-8"
               onClick={() => { setIsCreatingFolder(false); setNewTitle(""); setNewContent(""); setIsCreateDialogOpen(true) }}
               title="New Note"
@@ -938,7 +928,6 @@ export function ForgeList() {
       </Dialog>
 
       {showStarGazing && <StarGazingView onClose={() => setShowStarGazing(false)} />}
-      {showKnowledgeMap && <KnowledgeMapView onClose={() => setShowKnowledgeMap(false)} />}
 
       <AISummaryDialog
         open={isAISummaryOpen}
