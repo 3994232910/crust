@@ -8,6 +8,8 @@ from sqlmodel import Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
     from app.models.item import Item
+    from app.models.forge import Forge
+    from app.models.community import CommunityPost, UserFollow
 
 
 def get_datetime_utc() -> datetime:
@@ -76,6 +78,15 @@ class User(UserBase, table=True):
     )
     items: list["Item"] = Relationship(back_populates="owner", cascade_delete=True)
     forges: list["Forge"] = Relationship(back_populates="owner", cascade_delete=True)
+    community_posts: list["CommunityPost"] = Relationship(back_populates="owner", cascade_delete=True)
+    followers: list["UserFollow"] = Relationship(
+        back_populates="follower",
+        sa_relationship_kwargs={"foreign_keys": "[UserFollow.follower_id]"}
+    )
+    followings: list["UserFollow"] = Relationship(
+        back_populates="following",
+        sa_relationship_kwargs={"foreign_keys": "[UserFollow.following_id]"}
+    )
 
 
 # Properties to return via API, id is always required

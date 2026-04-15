@@ -1371,3 +1371,59 @@ async def ai_optimize_view(
     except Exception as e:
         logger.error(f"AI view parse failed: {e}, response: {ai_response[:200]}")
         return {'camera': current, 'message': 'AI 解析失败，保持当前视角'}
+
+
+@router.post("/{forge_id}/publish-to-community", response_model=dict)
+async def publish_forge_to_community(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    forge_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
+) -> Any:
+    """将 Forge 笔记发布到社区"""
+    forge = crud.get_forge(session=session, forge_id=forge_id)
+    if not forge:
+        raise HTTPException(status_code=404, detail="Forge not found")
+    
+    if forge.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    if not forge.title or not forge.content:
+        raise HTTPException(status_code=400, detail="Forge must have title and content")
+    
+    from app.models.community import CommunityPostCreate
+    
+    post_in = CommunityPostCreate(
+        title=forge.title,
+        content=forge.content,
+        source_forge_id=forge_id,
+        is_published=True,
+    )
+    
+    post = crud.create_community_post(
+        session=session, post_in=post_in, owner_id=current_user.id
+    )
+    
+    if post.content:
+        background_tasks.add_task(_generate_post_embedding_bg, post.id, post.content[:2000])
+    
+    return {
+        "message": "Published to community successfully",
+        "post_id": str(post.id),
+        "forge_id": str(forge_id),
+    }
+
+
+async def _generate_post_embedding_bg(post_id: uuid.UUID, content: str) -> None:
+    """后台任务：生成帖子向量"""
+    with Session(engine) as session:
+        try:
+            vectors = await ai_client.embed([content])
+            post = session.get(CommunityPost, post_id)
+            if post:
+                post.embedding = vectors[0]
+                session.add(post)
+                session.commit()
+        except Exception as e:
+            logger.warning(f"Post embedding generation failed: {e}")
