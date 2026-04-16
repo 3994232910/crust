@@ -14,7 +14,7 @@ RUN bun install
 COPY ./frontend /app/frontend
 ARG VITE_API_URL
 
-RUN bun run build
+RUN NODE_OPTIONS="--max-old-space-size=1024" bun run build
 
 
 # Stage 1, based on Nginx, to have only the compiled app, ready for production with Nginx
