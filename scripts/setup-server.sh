@@ -3,10 +3,16 @@
 # 用法：bash scripts/setup-server.sh
 set -e
 
-echo "=== [1/3] 安装 Docker ==="
-curl -fsSL https://get.docker.com | sh
-systemctl enable --now docker
-docker --version
+echo "=== [1/3] 检查 Docker ==="
+if command -v docker &> /dev/null; then
+    echo "Docker 已安装，跳过"
+    docker --version
+else
+    echo "安装 Docker..."
+    yum install -y docker
+    systemctl enable --now docker
+    docker --version
+fi
 
 echo "=== [2/3] 创建 2G Swap（防止内存不足）==="
 if [ ! -f /swapfile ]; then
