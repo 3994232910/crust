@@ -37,9 +37,7 @@ services:
   frontend:
     build:
       context: .
-      dockerfile: frontend/Dockerfile
-      args:
-        VITE_API_URL: ""
+      dockerfile: frontend/Dockerfile.prebuilt
     restart: unless-stopped
     ports:
       - "80:80"
