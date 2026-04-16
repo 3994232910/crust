@@ -14,10 +14,11 @@ import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as RecoverPasswordRouteImport } from './routes/recover-password'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LayoutRouteImport } from './routes/_layout'
+import { Route as R3dViewerRouteImport } from './routes/3d-viewer'
 import { Route as LayoutIndexRouteImport } from './routes/_layout/index'
 import { Route as LayoutSettingsRouteImport } from './routes/_layout/settings'
-import { Route as LayoutItemsRouteImport } from './routes/_layout/items'
 import { Route as LayoutForgeRouteImport } from './routes/_layout/forge'
+import { Route as LayoutCommunityRouteImport } from './routes/_layout/community'
 import { Route as LayoutAdminRouteImport } from './routes/_layout/admin'
 
 const SignupRoute = SignupRouteImport.update({
@@ -44,6 +45,11 @@ const LayoutRoute = LayoutRouteImport.update({
   id: '/_layout',
   getParentRoute: () => rootRouteImport,
 } as any)
+const R3dViewerRoute = R3dViewerRouteImport.update({
+  id: '/3d-viewer',
+  path: '/3d-viewer',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LayoutIndexRoute = LayoutIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -54,14 +60,14 @@ const LayoutSettingsRoute = LayoutSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => LayoutRoute,
 } as any)
-const LayoutItemsRoute = LayoutItemsRouteImport.update({
-  id: '/items',
-  path: '/items',
-  getParentRoute: () => LayoutRoute,
-} as any)
 const LayoutForgeRoute = LayoutForgeRouteImport.update({
   id: '/forge',
   path: '/forge',
+  getParentRoute: () => LayoutRoute,
+} as any)
+const LayoutCommunityRoute = LayoutCommunityRouteImport.update({
+  id: '/community',
+  path: '/community',
   getParentRoute: () => LayoutRoute,
 } as any)
 const LayoutAdminRoute = LayoutAdminRouteImport.update({
@@ -71,78 +77,85 @@ const LayoutAdminRoute = LayoutAdminRouteImport.update({
 } as any)
 
 export interface FileRoutesByFullPath {
+  '/3d-viewer': typeof R3dViewerRoute
   '/': typeof LayoutIndexRoute
   '/login': typeof LoginRoute
   '/recover-password': typeof RecoverPasswordRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
   '/admin': typeof LayoutAdminRoute
+  '/community': typeof LayoutCommunityRoute
   '/forge': typeof LayoutForgeRoute
-  '/items': typeof LayoutItemsRoute
   '/settings': typeof LayoutSettingsRoute
 }
 export interface FileRoutesByTo {
+  '/3d-viewer': typeof R3dViewerRoute
   '/login': typeof LoginRoute
   '/recover-password': typeof RecoverPasswordRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
   '/admin': typeof LayoutAdminRoute
+  '/community': typeof LayoutCommunityRoute
   '/forge': typeof LayoutForgeRoute
-  '/items': typeof LayoutItemsRoute
   '/settings': typeof LayoutSettingsRoute
   '/': typeof LayoutIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
+  '/3d-viewer': typeof R3dViewerRoute
   '/_layout': typeof LayoutRouteWithChildren
   '/login': typeof LoginRoute
   '/recover-password': typeof RecoverPasswordRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
   '/_layout/admin': typeof LayoutAdminRoute
+  '/_layout/community': typeof LayoutCommunityRoute
   '/_layout/forge': typeof LayoutForgeRoute
-  '/_layout/items': typeof LayoutItemsRoute
   '/_layout/settings': typeof LayoutSettingsRoute
   '/_layout/': typeof LayoutIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
+    | '/3d-viewer'
     | '/'
     | '/login'
     | '/recover-password'
     | '/reset-password'
     | '/signup'
     | '/admin'
+    | '/community'
     | '/forge'
-    | '/items'
     | '/settings'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/3d-viewer'
     | '/login'
     | '/recover-password'
     | '/reset-password'
     | '/signup'
     | '/admin'
+    | '/community'
     | '/forge'
-    | '/items'
     | '/settings'
     | '/'
   id:
     | '__root__'
+    | '/3d-viewer'
     | '/_layout'
     | '/login'
     | '/recover-password'
     | '/reset-password'
     | '/signup'
     | '/_layout/admin'
+    | '/_layout/community'
     | '/_layout/forge'
-    | '/_layout/items'
     | '/_layout/settings'
     | '/_layout/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
+  R3dViewerRoute: typeof R3dViewerRoute
   LayoutRoute: typeof LayoutRouteWithChildren
   LoginRoute: typeof LoginRoute
   RecoverPasswordRoute: typeof RecoverPasswordRoute
@@ -187,6 +200,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/3d-viewer': {
+      id: '/3d-viewer'
+      path: '/3d-viewer'
+      fullPath: '/3d-viewer'
+      preLoaderRoute: typeof R3dViewerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_layout/': {
       id: '/_layout/'
       path: '/'
@@ -201,18 +221,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutSettingsRouteImport
       parentRoute: typeof LayoutRoute
     }
-    '/_layout/items': {
-      id: '/_layout/items'
-      path: '/items'
-      fullPath: '/items'
-      preLoaderRoute: typeof LayoutItemsRouteImport
-      parentRoute: typeof LayoutRoute
-    }
     '/_layout/forge': {
       id: '/_layout/forge'
       path: '/forge'
       fullPath: '/forge'
       preLoaderRoute: typeof LayoutForgeRouteImport
+      parentRoute: typeof LayoutRoute
+    }
+    '/_layout/community': {
+      id: '/_layout/community'
+      path: '/community'
+      fullPath: '/community'
+      preLoaderRoute: typeof LayoutCommunityRouteImport
       parentRoute: typeof LayoutRoute
     }
     '/_layout/admin': {
@@ -227,16 +247,16 @@ declare module '@tanstack/react-router' {
 
 interface LayoutRouteChildren {
   LayoutAdminRoute: typeof LayoutAdminRoute
+  LayoutCommunityRoute: typeof LayoutCommunityRoute
   LayoutForgeRoute: typeof LayoutForgeRoute
-  LayoutItemsRoute: typeof LayoutItemsRoute
   LayoutSettingsRoute: typeof LayoutSettingsRoute
   LayoutIndexRoute: typeof LayoutIndexRoute
 }
 
 const LayoutRouteChildren: LayoutRouteChildren = {
   LayoutAdminRoute: LayoutAdminRoute,
+  LayoutCommunityRoute: LayoutCommunityRoute,
   LayoutForgeRoute: LayoutForgeRoute,
-  LayoutItemsRoute: LayoutItemsRoute,
   LayoutSettingsRoute: LayoutSettingsRoute,
   LayoutIndexRoute: LayoutIndexRoute,
 }
@@ -245,6 +265,7 @@ const LayoutRouteWithChildren =
   LayoutRoute._addFileChildren(LayoutRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
+  R3dViewerRoute: R3dViewerRoute,
   LayoutRoute: LayoutRouteWithChildren,
   LoginRoute: LoginRoute,
   RecoverPasswordRoute: RecoverPasswordRoute,
