@@ -18,6 +18,14 @@ function getViewStorageKey(modelPath: string): string {
   return 'forge_model_view_' + modelPath.replace(/[^a-zA-Z0-9._-]/g, '_')
 }
 
+export function getModelThumbnailKey(modelPath: string): string {
+  return 'forge_model_screenshot_' + modelPath.replace(/[^a-zA-Z0-9._-]/g, '_')
+}
+
+function saveThumbnailToStorage(modelPath: string, dataURL: string): void {
+  try { localStorage.setItem(getModelThumbnailKey(modelPath), dataURL) } catch {}
+}
+
 function loadSavedView(modelPath: string): CameraTarget | null {
   try {
     const raw = localStorage.getItem(getViewStorageKey(modelPath))
@@ -156,6 +164,26 @@ function ScreenshotCapture({ onCapture, captureTrigger }: { onCapture: (screensh
     }
   })
 
+  return null
+}
+
+/** Captures a frame and saves it to localStorage as the model thumbnail. */
+function ThumbnailCapture({ modelPath, trigger }: { modelPath: string; trigger: number }) {
+  const { gl, invalidate } = useThree()
+  const pending = useRef(false)
+
+  useEffect(() => {
+    if (trigger > 0) { pending.current = true; invalidate() }
+  }, [trigger, invalidate])
+
+  useFrame(() => {
+    if (!pending.current) return
+    pending.current = false
+    requestAnimationFrame(() => {
+      const dataURL = gl.domElement.toDataURL('image/jpeg', 0.75)
+      saveThumbnailToStorage(modelPath, dataURL)
+    })
+  })
   return null
 }
 
@@ -299,7 +327,10 @@ function BBoxCameraFitter({
   return null
 }
 
-function useAILightOptimization(hasSavedViewRef: React.RefObject<boolean>) {
+function useAILightOptimization(
+  hasSavedViewRef: React.RefObject<boolean>,
+  onThumbnailCaptured?: (dataURL: string) => void,
+) {
   const [lightConfig, setLightConfig] = useState<LightConfig>(DEFAULT_LIGHT_CONFIG)
   const [isOptimizing, setIsOptimizing] = useState(false)
   const [isOptimizingView, setIsOptimizingView] = useState(false)
@@ -311,8 +342,12 @@ function useAILightOptimization(hasSavedViewRef: React.RefObject<boolean>) {
   // Stub ref populated after requestAIViewOptimization is defined below
   const requestAIViewOptimizationRef = useRef<(s?: string) => Promise<void>>(async () => {})
 
+  const onThumbnailCapturedRef = useRef(onThumbnailCaptured)
+  onThumbnailCapturedRef.current = onThumbnailCaptured
+
   const captureScreenshot = useCallback((dataURL: string) => {
     setScreenshot(dataURL)
+    onThumbnailCapturedRef.current?.(dataURL)
   }, [])
 
   const requestAIOptimization = async (currentScreenshot: string, iteration: number = 1) => {
@@ -491,8 +526,15 @@ export function Model3DRenderer({ modelPath, onModelClick, initialView }: Model3
   const userHasSavedViewRef = useRef(userHasSavedView)
   userHasSavedViewRef.current = userHasSavedView
 
+  // User-orbit thumbnail trigger (fires after user releases the model)
+  const [thumbnailTrigger, setThumbnailTrigger] = useState(0)
+
   // Scene for bbox fitting (set by ModelContent once loaded)
   const [loadedScene, setLoadedScene] = useState<Group | null>(null)
+
+  const onThumbnailCaptured = useCallback((dataURL: string) => {
+    saveThumbnailToStorage(resolvedModelPath, dataURL)
+  }, [resolvedModelPath])
 
   const {
     lightConfig,
@@ -505,7 +547,7 @@ export function Model3DRenderer({ modelPath, onModelClick, initialView }: Model3
     cameraTarget,
     clearCameraTarget,
     currentCameraRef,
-  } = useAILightOptimization(userHasSavedViewRef)
+  } = useAILightOptimization(userHasSavedViewRef, onThumbnailCaptured)
 
   useEffect(() => {
     console.log('Loading model from:', resolvedModelPath)
@@ -602,6 +644,7 @@ export function Model3DRenderer({ modelPath, onModelClick, initialView }: Model3
             onCapture={handleScreenshotReady}
             captureTrigger={captureTrigger}
           />
+          <ThumbnailCapture modelPath={resolvedModelPath} trigger={thumbnailTrigger} />
           <ErrorBoundary onError={() => setError(true)}>
             <ModelContent
               path={resolvedModelPath}
@@ -643,6 +686,7 @@ export function Model3DRenderer({ modelPath, onModelClick, initialView }: Model3
                 }
                 saveView(resolvedModelPath, view)
                 setUserHasSavedView(true)
+                setThumbnailTrigger((t) => t + 1)
               }
             }}
           />

@@ -9,7 +9,7 @@ import 'highlight.js/styles/github-dark.css'
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { Box, Link2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Model3DRenderer } from './Model3DRenderer'
+import { Model3DViewerFrame } from './Model3DViewerFrame'
 import { ModelUploadDialog } from './ModelUploadDialog'
 
 interface WikiForge {
@@ -188,7 +188,7 @@ export function MarkdownEditor({
       return (
         <div className="my-6 not-prose" data-paragraph-id={stableId}>
           <div className="border rounded-lg overflow-hidden bg-slate-800/50">
-            <Model3DRenderer
+            <Model3DViewerFrame
               modelPath={src}
               onModelClick={(partName) => console.log(`Model clicked: ${partName}`)}
             />
@@ -209,7 +209,7 @@ export function MarkdownEditor({
         return (
           <div className="my-6 not-prose" data-paragraph-id={bindTo}>
             <div className="border rounded-lg overflow-hidden bg-slate-800/50">
-              <Model3DRenderer
+              <Model3DViewerFrame
                 modelPath={modelPath}
                 onModelClick={(partName) => {
                   console.log(`Model clicked: ${partName} for paragraph ${bindTo}`)

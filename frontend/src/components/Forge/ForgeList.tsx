@@ -22,6 +22,7 @@ import { CSS } from "@dnd-kit/utilities"
 import {
   ChevronDown,
   ChevronRight,
+  CheckCircle2,
   Download,
   Eye,
   FileText,
@@ -32,6 +33,7 @@ import {
   Pen,
   Plus,
   Search,
+  Share2,
   Sparkles,
   Split,
   Telescope,
@@ -67,6 +69,7 @@ import { Label } from "@/components/ui/label"
 import useToast from "@/hooks/useCustomToast"
 import { AISummaryDialog } from "./AISummaryDialog"
 import { MarkdownEditor } from "./MarkdownEditor"
+import { getModelThumbnailKey } from "./Model3DRenderer"
 import StarGazingView from "./StarGazingView"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -125,6 +128,7 @@ export function ForgeList() {
   const [isAISummaryOpen, setIsAISummaryOpen] = useState(false)
   const [isStreaming, setIsStreaming] = useState(false)
   const [backlinks, setBacklinks] = useState<Forge[]>([])
+  const [isPublishing, setIsPublishing] = useState(false)
 
   // DnD state
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -612,6 +616,48 @@ export function ForgeList() {
     }
   }
 
+  // ─── Publish to Community ─────────────────────────────────────────────────
+
+  const handlePublishToCommunity = async () => {
+    if (!selectedForge || isPublishing) return
+
+    // Extract <model src="..."> tags to find thumbnails
+    const content = editContent || selectedForge.content || ""
+    const modelMatches = [...content.matchAll(/<model\s+src="([^"]+)"/g)]
+    let thumbnail: string | undefined
+    for (const m of modelMatches) {
+      const key = getModelThumbnailKey(m[1])
+      const saved = localStorage.getItem(key)
+      if (saved) { thumbnail = saved; break }
+    }
+
+    setIsPublishing(true)
+    try {
+      const token = localStorage.getItem("access_token")
+      const headers: Record<string, string> = { "Content-Type": "application/json" }
+      if (token) headers["Authorization"] = `Bearer ${token}`
+
+      const res = await fetch(`/api/v1/forge/${selectedForge.id}/publish-to-community`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ thumbnail: thumbnail ?? null }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.detail ?? res.statusText)
+      }
+      setForges((prev) =>
+        prev.map((f) => f.id === selectedForge.id ? { ...f, published_to_community: true } : f)
+      )
+      setSelectedForge((prev) => prev ? { ...prev, published_to_community: true } : prev)
+      toast.showSuccessToast("已发布到 Community")
+    } catch (err) {
+      toast.showErrorToast(err instanceof Error ? err.message : "发布失败")
+    } finally {
+      setIsPublishing(false)
+    }
+  }
+
   // ─── Sidebar resize ────────────────────────────────────────────────────────
 
   const handleMouseDown = (e: React.MouseEvent) => { e.preventDefault(); setIsResizing(true) }
@@ -823,6 +869,24 @@ export function ForgeList() {
                     ))}
                   </DropdownMenuContent>
                 </DropdownMenu>
+                {(selectedForge as any).published_to_community ? (
+                  <button
+                    className="p-1.5 rounded text-primary cursor-default"
+                    title="已发布到 Community"
+                    disabled
+                  >
+                    <CheckCircle2 className="h-4 w-4" />
+                  </button>
+                ) : (
+                  <button
+                    className={`p-1.5 rounded transition-colors hover:bg-accent text-muted-foreground ${isPublishing ? "opacity-50 cursor-wait" : ""}`}
+                    title="发布到 Community"
+                    onClick={handlePublishToCommunity}
+                    disabled={isPublishing}
+                  >
+                    <Share2 className="h-4 w-4" />
+                  </button>
+                )}
                 <Button
                   variant="ghost" size="icon"
                   onClick={() => handleDeleteForge(selectedForge.id)}
