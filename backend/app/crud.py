@@ -209,7 +209,9 @@ def update_community_post(
     *, session: Session, db_post: CommunityPost, post_in: CommunityPostUpdate
 ) -> CommunityPost:
     """更新帖子"""
+    from datetime import datetime, timezone
     update_data = post_in.model_dump(exclude_unset=True)
+    update_data["updated_at"] = datetime.now(timezone.utc)
     db_post.sqlmodel_update(update_data)
     session.add(db_post)
     session.commit()

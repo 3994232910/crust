@@ -47,6 +47,11 @@ models_dir = Path("models")
 models_dir.mkdir(exist_ok=True)
 app.mount("/models", StaticFiles(directory=models_dir), name="models")
 
+# Mount static files for community post thumbnails
+thumbnails_dir = Path("thumbnails")
+thumbnails_dir.mkdir(exist_ok=True)
+app.mount("/thumbnails", StaticFiles(directory=thumbnails_dir), name="thumbnails")
+
 # Set all CORS enabled origins
 if settings.all_cors_origins:
     app.add_middleware(
@@ -58,7 +63,7 @@ if settings.all_cors_origins:
     )
 
 _PING_INTERVAL = timedelta(minutes=5)
-_SKIP_PING_PREFIXES = ("/avatars", "/models", f"{settings.API_V1_STR}/openapi")
+_SKIP_PING_PREFIXES = ("/avatars", "/models", "/thumbnails", f"{settings.API_V1_STR}/openapi")
 
 
 @app.middleware("http")
