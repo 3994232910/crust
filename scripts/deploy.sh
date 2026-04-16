@@ -25,10 +25,10 @@ echo "=== [1/3] 拉取最新代码 ==="
 git pull
 
 echo "=== [2/3] 构建并启动服务 ==="
-docker compose -f docker-compose.prod.yml up -d --build
+docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
 
 echo "=== [3/3] 检查服务状态 ==="
-docker compose -f docker-compose.prod.yml ps
+docker compose -f docker-compose.prod.yml --env-file .env.prod ps
 
 echo ""
 echo "✓ 部署完成"
