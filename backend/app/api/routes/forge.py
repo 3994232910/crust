@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, UploadFile, File
 from fastapi.responses import StreamingResponse
-from sqlmodel import Session, select
+from sqlmodel import SQLModel, Session, select
 
 from app.api.deps import CurrentUser, SessionDep
 from app.core.db import engine
@@ -1373,6 +1373,10 @@ async def ai_optimize_view(
         return {'camera': current, 'message': 'AI 解析失败，保持当前视角'}
 
 
+class PublishToCommunityRequest(SQLModel):
+    thumbnail: str | None = None  # base64 JPEG data URL
+
+
 @router.post("/{forge_id}/publish-to-community", response_model=dict)
 async def publish_forge_to_community(
     *,
@@ -1380,34 +1384,53 @@ async def publish_forge_to_community(
     current_user: CurrentUser,
     forge_id: uuid.UUID,
     background_tasks: BackgroundTasks,
+    body: PublishToCommunityRequest | None = None,
 ) -> Any:
     """将 Forge 笔记发布到社区"""
     forge = crud.get_forge(session=session, forge_id=forge_id)
     if not forge:
         raise HTTPException(status_code=404, detail="Forge not found")
-    
+
     if forge.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized")
-    
+
     if not forge.title or not forge.content:
         raise HTTPException(status_code=400, detail="Forge must have title and content")
-    
+
+    # Save thumbnail if provided
+    thumbnail_url: str | None = None
+    if body and body.thumbnail:
+        try:
+            import base64, re as _re
+            match = _re.match(r"data:image/(\w+);base64,(.+)", body.thumbnail)
+            if match:
+                ext = match.group(1)
+                data = base64.b64decode(match.group(2))
+                thumbnails_dir = Path("thumbnails")
+                thumbnails_dir.mkdir(exist_ok=True)
+                filename = f"{forge_id}.{ext}"
+                (thumbnails_dir / filename).write_bytes(data)
+                thumbnail_url = f"/thumbnails/{filename}"
+        except Exception as e:
+            logger.warning(f"Failed to save thumbnail: {e}")
+
     from app.models.community import CommunityPostCreate
-    
+
     post_in = CommunityPostCreate(
         title=forge.title,
         content=forge.content,
         source_forge_id=forge_id,
         is_published=True,
+        thumbnail=thumbnail_url,
     )
-    
+
     post = crud.create_community_post(
         session=session, post_in=post_in, owner_id=current_user.id
     )
-    
+
     if post.content:
         background_tasks.add_task(_generate_post_embedding_bg, post.id, post.content[:2000])
-    
+
     return {
         "message": "Published to community successfully",
         "post_id": str(post.id),
