@@ -18,6 +18,7 @@ class CommunityPostBase(SQLModel):
     content: str | None = None
     source_forge_id: uuid.UUID | None = None
     is_published: bool = True
+    thumbnail: str | None = None
 
 
 class CommunityPostCreate(CommunityPostBase):
