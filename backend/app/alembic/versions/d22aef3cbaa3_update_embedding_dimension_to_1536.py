@@ -1,7 +1,7 @@
 """Update embedding dimension to 1536 for LiteLLM
 
 Revision ID: d22aef3cbaa3
-Revises: fe56fa70289e
+Revises: a3f2c1d8e954
 Create Date: 2026-04-10
 
 """
@@ -11,7 +11,7 @@ from pgvector.sqlalchemy import Vector
 
 # revision identifiers, used by Alembic.
 revision = 'd22aef3cbaa3'
-down_revision = 'fe56fa70289e'
+down_revision = 'a3f2c1d8e954'
 branch_labels = None
 depends_on = None
 
