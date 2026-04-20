@@ -26,6 +26,7 @@ class CommunityPostWithAuthor(SQLModel):
     updated_at: datetime
     favorite_count: int = 0
     is_favorited: bool = False
+    is_following: bool = False
 
 
 class CommunityPostsWithAuthor(SQLModel):
@@ -55,6 +56,7 @@ def _enrich_post(
     owner_full_name: str | None,
     favorite_count: int,
     is_favorited: bool,
+    is_following: bool = False,
 ) -> CommunityPostWithAuthor:
     return CommunityPostWithAuthor(
         id=post.id,
@@ -69,6 +71,7 @@ def _enrich_post(
         updated_at=post.updated_at,
         favorite_count=favorite_count,
         is_favorited=is_favorited,
+        is_following=is_following,
     )
 
 
@@ -109,6 +112,7 @@ def list_community_posts(
             user.full_name,
             crud.get_post_favorite_count(session=session, post_id=post.id),
             crud.is_post_favorited(session=session, user_id=viewer_id, post_id=post.id) if viewer_id else False,
+            crud.is_following_user(session=session, follower_id=viewer_id, following_id=post.owner_id) if viewer_id else False,
         )
         for post, user in results
     ]
@@ -144,6 +148,7 @@ def list_my_posts(
             current_user.full_name,
             crud.get_post_favorite_count(session=session, post_id=p.id),
             crud.is_post_favorited(session=session, user_id=current_user.id, post_id=p.id),
+            False,
         )
         for p in posts
     ]
@@ -169,6 +174,7 @@ def list_my_favorites(
             owner.full_name if owner else None,
             crud.get_post_favorite_count(session=session, post_id=p.id),
             True,  # already favorited
+            crud.is_following_user(session=session, follower_id=current_user.id, following_id=p.owner_id),
         ))
 
     return CommunityPostsWithAuthor(data=data, count=len(data))
@@ -225,6 +231,7 @@ async def search_community_posts(
             owner.full_name if owner else None,
             crud.get_post_favorite_count(session=session, post_id=post.id),
             crud.is_post_favorited(session=session, user_id=current_user.id, post_id=post.id),
+            crud.is_following_user(session=session, follower_id=current_user.id, following_id=post.owner_id),
         ))
 
     return CommunityPostsWithAuthor(data=data, count=len(data))
@@ -252,6 +259,7 @@ def get_community_post(
         owner.full_name if owner else None,
         crud.get_post_favorite_count(session=session, post_id=post.id),
         crud.is_post_favorited(session=session, user_id=viewer_id, post_id=post.id) if viewer_id else False,
+        crud.is_following_user(session=session, follower_id=viewer_id, following_id=post.owner_id) if viewer_id else False,
     )
 
 
@@ -288,7 +296,7 @@ async def publish_post(
     # 后台生成 embedding
     background_tasks.add_task(_generate_post_embedding_bg, post.id)
 
-    return _enrich_post(post, current_user.full_name, 0, False)
+    return _enrich_post(post, current_user.full_name, 0, False, False)
 
 
 @router.patch("/{post_id}", response_model=CommunityPostWithAuthor)
@@ -311,6 +319,7 @@ def update_community_post(
         current_user.full_name,
         crud.get_post_favorite_count(session=session, post_id=post.id),
         crud.is_post_favorited(session=session, user_id=current_user.id, post_id=post.id),
+        False if post.owner_id == current_user.id else crud.is_following_user(session=session, follower_id=current_user.id, following_id=post.owner_id),
     )
 
 
