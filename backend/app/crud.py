@@ -290,6 +290,19 @@ def unfollow_user(*, session: Session, follower_id: uuid.UUID, following_id: uui
         session.commit()
 
 
+def is_following_user(*, session: Session, follower_id: uuid.UUID | None, following_id: uuid.UUID) -> bool:
+    """检查用户是否已关注另一用户"""
+    if not follower_id or follower_id == following_id:
+        return False
+    follow = session.exec(
+        select(UserFollow).where(
+            UserFollow.follower_id == follower_id,
+            UserFollow.following_id == following_id
+        )
+    ).first()
+    return follow is not None
+
+
 def get_following_users(*, session: Session, user_id: uuid.UUID) -> list[dict]:
     """获取用户关注的列表"""
     from app.models.user import User
