@@ -26,6 +26,7 @@ interface CommunityPost {
   owner_full_name: string | null
   created_at: string
   updated_at: string
+  is_following?: boolean
 }
 
 interface CommunityPostsResponse {
@@ -197,11 +198,14 @@ interface DetailDialogProps {
   post: CommunityPost | null
   onClose: () => void
   onDelete: (id: string) => Promise<void>
+  onFollowToggle: (post: CommunityPost) => Promise<void>
   canDelete: (post: CommunityPost) => boolean
   deleting: boolean
+  following: boolean
 }
 
-function DetailDialog({ post, onClose, onDelete, canDelete, deleting }: DetailDialogProps) {
+function DetailDialog({ post, onClose, onDelete, onFollowToggle, canDelete, deleting, following }: DetailDialogProps) {
+  const { user: currentUser } = useAuth()
   const imageUrl = post?.thumbnail
     ? resolveImageUrl(post.thumbnail)
     : extractFirstImage(post?.content ?? null)
@@ -239,6 +243,21 @@ function DetailDialog({ post, onClose, onDelete, canDelete, deleting }: DetailDi
               <span className="text-sm text-muted-foreground">
                 {post ? formatRelativeTime(post.created_at) : ''}
               </span>
+              {post && currentUser?.id !== post.owner_id && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={`h-7 gap-1 ${
+                    post.is_following
+                      ? 'text-primary hover:text-destructive hover:bg-destructive/10'
+                      : 'text-muted-foreground hover:text-primary'
+                  }`}
+                  disabled={following}
+                  onClick={() => onFollowToggle(post)}
+                >
+                  {following ? '…' : post.is_following ? 'Following' : 'Follow'}
+                </Button>
+              )}
               {post && canDelete(post) && (
                 <Button
                   variant="ghost"
@@ -277,6 +296,7 @@ export function CommunityFeed() {
   const [error, setError] = useState<string | null>(null)
   const [selected, setSelected] = useState<CommunityPost | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [following, setFollowing] = useState(false)
   const skipRef = useRef(skip)
   skipRef.current = skip
 
@@ -323,6 +343,36 @@ export function CommunityFeed() {
 
   const canDelete = (post: CommunityPost) =>
     !!(currentUser?.is_superuser || currentUser?.id === post.owner_id)
+
+  const handleFollowToggle = async (post: CommunityPost) => {
+    if (!currentUser) return
+    setFollowing(true)
+    try {
+      const url = `/api/v1/community/follow/${post.owner_id}`
+      const res = await fetch(url, {
+        method: post.is_following ? 'DELETE' : 'POST',
+        headers: authHeaders(),
+      })
+      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+
+      // Optimistic update
+      const nextFollowing = !post.is_following
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.owner_id === post.owner_id ? { ...p, is_following: nextFollowing } : p
+        )
+      )
+      setSelected((prev) =>
+        prev && prev.owner_id === post.owner_id
+          ? { ...prev, is_following: nextFollowing }
+          : prev
+      )
+    } catch (e) {
+      alert(String(e))
+    } finally {
+      setFollowing(false)
+    }
+  }
 
   const totalPages = Math.ceil(count / LIMIT)
   const currentPage = Math.floor(skip / LIMIT)
@@ -403,8 +453,10 @@ export function CommunityFeed() {
         post={selected}
         onClose={() => setSelected(null)}
         onDelete={handleDelete}
+        onFollowToggle={handleFollowToggle}
         canDelete={canDelete}
         deleting={deleting}
+        following={following}
       />
     </div>
   )
