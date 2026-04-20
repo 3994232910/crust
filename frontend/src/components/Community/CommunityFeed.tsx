@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import useAuth from '@/hooks/useAuth'
 import { GalaxyIcon } from './GalaxyIcon'
 
@@ -26,6 +27,7 @@ interface CommunityPost {
   owner_full_name: string | null
   created_at: string
   updated_at: string
+  is_following?: boolean
 }
 
 interface CommunityPostsResponse {
@@ -197,11 +199,14 @@ interface DetailDialogProps {
   post: CommunityPost | null
   onClose: () => void
   onDelete: (id: string) => Promise<void>
+  onFollowToggle: (post: CommunityPost) => Promise<void>
   canDelete: (post: CommunityPost) => boolean
   deleting: boolean
+  following: boolean
 }
 
-function DetailDialog({ post, onClose, onDelete, canDelete, deleting }: DetailDialogProps) {
+function DetailDialog({ post, onClose, onDelete, onFollowToggle, canDelete, deleting, following }: DetailDialogProps) {
+  const { user: currentUser } = useAuth()
   const imageUrl = post?.thumbnail
     ? resolveImageUrl(post.thumbnail)
     : extractFirstImage(post?.content ?? null)
@@ -239,6 +244,21 @@ function DetailDialog({ post, onClose, onDelete, canDelete, deleting }: DetailDi
               <span className="text-sm text-muted-foreground">
                 {post ? formatRelativeTime(post.created_at) : ''}
               </span>
+              {post && currentUser?.id !== post.owner_id && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={`h-7 gap-1 ${
+                    post.is_following
+                      ? 'text-primary hover:text-destructive hover:bg-destructive/10'
+                      : 'text-muted-foreground hover:text-primary'
+                  }`}
+                  disabled={following}
+                  onClick={() => onFollowToggle(post)}
+                >
+                  {following ? '…' : post.is_following ? 'Following' : 'Follow'}
+                </Button>
+              )}
               {post && canDelete(post) && (
                 <Button
                   variant="ghost"
@@ -277,6 +297,8 @@ export function CommunityFeed() {
   const [error, setError] = useState<string | null>(null)
   const [selected, setSelected] = useState<CommunityPost | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [following, setFollowing] = useState(false)
+  const [activeTab, setActiveTab] = useState('feed')
   const skipRef = useRef(skip)
   skipRef.current = skip
 
@@ -324,6 +346,36 @@ export function CommunityFeed() {
   const canDelete = (post: CommunityPost) =>
     !!(currentUser?.is_superuser || currentUser?.id === post.owner_id)
 
+  const handleFollowToggle = async (post: CommunityPost) => {
+    if (!currentUser) return
+    setFollowing(true)
+    try {
+      const url = `/api/v1/community/follow/${post.owner_id}`
+      const res = await fetch(url, {
+        method: post.is_following ? 'DELETE' : 'POST',
+        headers: authHeaders(),
+      })
+      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+
+      // Optimistic update
+      const nextFollowing = !post.is_following
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.owner_id === post.owner_id ? { ...p, is_following: nextFollowing } : p
+        )
+      )
+      setSelected((prev) =>
+        prev && prev.owner_id === post.owner_id
+          ? { ...prev, is_following: nextFollowing }
+          : prev
+      )
+    } catch (e) {
+      alert(String(e))
+    } finally {
+      setFollowing(false)
+    }
+  }
+
   const totalPages = Math.ceil(count / LIMIT)
   const currentPage = Math.floor(skip / LIMIT)
 
@@ -343,68 +395,85 @@ export function CommunityFeed() {
         )}
       </div>
 
-      {/* Error */}
-      {error && (
-        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-          {error}
-        </div>
-      )}
-
-      {/* Loading */}
-      {loading && <SkeletonCards />}
-
-      {/* Empty state */}
-      {!loading && !error && posts.length === 0 && (
-        <div className="flex flex-col items-center gap-4 py-24 text-center">
-          <GalaxyIcon size={52} className="text-muted-foreground/30" strokeWidth={1} />
-          <p className="text-muted-foreground">No posts yet.</p>
-          <p className="text-sm text-muted-foreground/50">
-            Publish a note from Forge to get started.
-          </p>
-        </div>
-      )}
-
-      {/* Masonry waterfall */}
-      {!loading && posts.length > 0 && (
-        <MasonryGrid>
-          {posts.map((post) => (
-            <PostCard key={post.id} post={post} onClick={() => setSelected(post)} />
-          ))}
-        </MasonryGrid>
-      )}
-
-      {/* Pagination */}
-      {!loading && totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2 pt-2">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={currentPage === 0}
-            onClick={() => setSkip(Math.max(0, skip - LIMIT))}
+      {/* Top navigation bar */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="w-full justify-start rounded-none border-b bg-transparent p-0 h-10">
+          <TabsTrigger
+            value="feed"
+            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 py-2 text-sm"
           >
-            Previous
-          </Button>
-          <span className="text-sm text-muted-foreground">
-            {currentPage + 1} / {totalPages}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={currentPage >= totalPages - 1}
-            onClick={() => setSkip(skip + LIMIT)}
-          >
-            Next
-          </Button>
-        </div>
-      )}
+            全部
+          </TabsTrigger>
+          {/* 预留：我的帖子、我的收藏、关注的人 */}
+        </TabsList>
+
+        <TabsContent value="feed" className="mt-4 space-y-4">
+          {/* Error */}
+          {error && (
+            <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+              {error}
+            </div>
+          )}
+
+          {/* Loading */}
+          {loading && <SkeletonCards />}
+
+          {/* Empty state */}
+          {!loading && !error && posts.length === 0 && (
+            <div className="flex flex-col items-center gap-4 py-24 text-center">
+              <GalaxyIcon size={52} className="text-muted-foreground/30" strokeWidth={1} />
+              <p className="text-muted-foreground">No posts yet.</p>
+              <p className="text-sm text-muted-foreground/50">
+                Publish a note from Forge to get started.
+              </p>
+            </div>
+          )}
+
+          {/* Masonry waterfall */}
+          {!loading && posts.length > 0 && (
+            <MasonryGrid>
+              {posts.map((post) => (
+                <PostCard key={post.id} post={post} onClick={() => setSelected(post)} />
+              ))}
+            </MasonryGrid>
+          )}
+
+          {/* Pagination */}
+          {!loading && totalPages > 1 && (
+            <div className="flex items-center justify-center gap-2 pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={currentPage === 0}
+                onClick={() => setSkip(Math.max(0, skip - LIMIT))}
+              >
+                Previous
+              </Button>
+              <span className="text-sm text-muted-foreground">
+                {currentPage + 1} / {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={currentPage >= totalPages - 1}
+                onClick={() => setSkip(skip + LIMIT)}
+              >
+                Next
+              </Button>
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
 
       {/* Detail dialog */}
       <DetailDialog
         post={selected}
         onClose={() => setSelected(null)}
         onDelete={handleDelete}
+        onFollowToggle={handleFollowToggle}
         canDelete={canDelete}
         deleting={deleting}
+        following={following}
       />
     </div>
   )
