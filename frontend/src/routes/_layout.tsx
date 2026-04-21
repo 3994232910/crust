@@ -20,9 +20,21 @@ export const Route = createFileRoute("/_layout")({
   },
 })
 
+function CommunityNav() {
+  return (
+    <nav className="flex items-center gap-1 ml-2">
+      <button className="px-3 py-1.5 text-sm font-medium rounded-md bg-muted text-foreground">
+        全部
+      </button>
+      {/* 预留：我的帖子、我的收藏、关注的人 */}
+    </nav>
+  )
+}
+
 function Layout() {
   const location = useLocation()
   const isForgePage = location.pathname === "/forge"
+  const isCommunityPage = location.pathname === "/community"
 
   return (
     <SidebarProvider className={isForgePage ? "h-svh overflow-hidden" : ""}>
@@ -31,6 +43,7 @@ function Layout() {
         {!isForgePage && (
           <header className="sticky top-0 z-10 flex h-16 shrink-0 items-center gap-2 border-b px-4">
             <SidebarTrigger className="-ml-1 text-muted-foreground" />
+            {isCommunityPage && <CommunityNav />}
           </header>
         )}
         {isForgePage ? (
