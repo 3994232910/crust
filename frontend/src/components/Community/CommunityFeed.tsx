@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useLocation } from '@tanstack/react-router'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -11,7 +12,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import useAuth from '@/hooks/useAuth'
 import { GalaxyIcon } from './GalaxyIcon'
 
@@ -33,6 +33,14 @@ interface CommunityPost {
 interface CommunityPostsResponse {
   data: CommunityPost[]
   count: number
+}
+
+interface FollowingUser {
+  user_id: string
+  full_name: string | null
+  email: string
+  post_count: number
+  followed_at: string
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
@@ -193,6 +201,23 @@ function SkeletonCards() {
   )
 }
 
+// ─── User card (for Following tab) ─────────────────────────────────────────────
+
+function UserCardSkeleton() {
+  return (
+    <div className="rounded-lg border bg-card p-4 space-y-3">
+      <div className="flex items-center gap-3">
+        <Skeleton className="h-10 w-10 rounded-full" />
+        <div className="space-y-2 flex-1">
+          <Skeleton className="h-4 w-32" />
+          <Skeleton className="h-3 w-48" />
+        </div>
+      </div>
+      <Skeleton className="h-3 w-24" />
+    </div>
+  )
+}
+
 // ─── Detail dialog ─────────────────────────────────────────────────────────────
 
 interface DetailDialogProps {
@@ -290,7 +315,12 @@ function DetailDialog({ post, onClose, onDelete, onFollowToggle, canDelete, dele
 
 export function CommunityFeed() {
   const { user: currentUser } = useAuth()
+  const location = useLocation()
+  const search = new URLSearchParams(location.search)
+  const activeTab = search.get('tab') || 'feed'
+
   const [posts, setPosts] = useState<CommunityPost[]>([])
+  const [followingUsers, setFollowingUsers] = useState<FollowingUser[]>([])
   const [count, setCount] = useState(0)
   const [skip, setSkip] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -298,22 +328,38 @@ export function CommunityFeed() {
   const [selected, setSelected] = useState<CommunityPost | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [following, setFollowing] = useState(false)
-  const [activeTab, setActiveTab] = useState('feed')
   const skipRef = useRef(skip)
   skipRef.current = skip
 
-  const fetchPosts = useCallback(async (skipVal: number) => {
+  const fetchData = useCallback(async (skipVal: number, tab: string) => {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(
-        `/api/v1/community/?skip=${skipVal}&limit=${LIMIT}`,
-        { headers: authHeaders() },
-      )
+      let url: string
+      if (tab === 'my-posts') {
+        url = `/api/v1/community/my-posts?skip=${skipVal}&limit=${LIMIT}`
+      } else if (tab === 'my-favorites') {
+        url = `/api/v1/community/my-favorites`
+      } else if (tab === 'following') {
+        url = `/api/v1/community/following`
+      } else {
+        url = `/api/v1/community/?skip=${skipVal}&limit=${LIMIT}`
+      }
+
+      const res = await fetch(url, { headers: authHeaders() })
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
-      const data = (await res.json()) as CommunityPostsResponse
-      setPosts(data.data)
-      setCount(data.count)
+
+      if (tab === 'following') {
+        const data = (await res.json()) as FollowingUser[]
+        setFollowingUsers(data)
+        setCount(data.length)
+        setPosts([])
+      } else {
+        const data = (await res.json()) as CommunityPostsResponse
+        setPosts(data.data)
+        setCount(data.count)
+        setFollowingUsers([])
+      }
     } catch (e) {
       setError(String(e))
     } finally {
@@ -322,8 +368,15 @@ export function CommunityFeed() {
   }, [])
 
   useEffect(() => {
-    fetchPosts(skip)
-  }, [fetchPosts, skip])
+    setSkip(0)
+    fetchData(0, activeTab)
+  }, [fetchData, activeTab])
+
+  useEffect(() => {
+    if (activeTab !== 'following') {
+      fetchData(skip, activeTab)
+    }
+  }, [fetchData, skip, activeTab])
 
   const handleDelete = async (postId: string) => {
     if (!confirm('Delete this post?')) return
@@ -335,7 +388,7 @@ export function CommunityFeed() {
       })
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
       setSelected(null)
-      fetchPosts(skipRef.current)
+      fetchData(skipRef.current, activeTab)
     } catch (e) {
       alert(String(e))
     } finally {
@@ -376,8 +429,37 @@ export function CommunityFeed() {
     }
   }
 
+  const handleUnfollowUser = async (userId: string) => {
+    if (!currentUser) return
+    if (!confirm('取消关注该用户？')) return
+    try {
+      const res = await fetch(`/api/v1/community/follow/${userId}`, {
+        method: 'DELETE',
+        headers: authHeaders(),
+      })
+      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+      setFollowingUsers((prev) => prev.filter((u) => u.user_id !== userId))
+    } catch (e) {
+      alert(String(e))
+    }
+  }
+
   const totalPages = Math.ceil(count / LIMIT)
   const currentPage = Math.floor(skip / LIMIT)
+
+  const tabTitle: Record<string, string> = {
+    feed: 'Community',
+    'my-posts': 'My Posts',
+    'my-favorites': 'My Favorites',
+    following: 'Following',
+  }
+
+  const tabDesc: Record<string, string> = {
+    feed: 'Notes shared by the community',
+    'my-posts': 'Posts you have published',
+    'my-favorites': 'Posts you have favorited',
+    following: 'People you are following',
+  }
 
   return (
     <div className="space-y-6">
@@ -385,8 +467,8 @@ export function CommunityFeed() {
       <div className="flex items-center gap-3">
         <GalaxyIcon size={26} className="text-primary shrink-0" strokeWidth={1.4} />
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Community</h1>
-          <p className="text-sm text-muted-foreground">Notes shared by the community</p>
+          <h1 className="text-2xl font-semibold tracking-tight">{tabTitle[activeTab] ?? 'Community'}</h1>
+          <p className="text-sm text-muted-foreground">{tabDesc[activeTab] ?? 'Notes shared by the community'}</p>
         </div>
         {count > 0 && (
           <Badge variant="secondary" className="ml-auto">
@@ -395,75 +477,118 @@ export function CommunityFeed() {
         )}
       </div>
 
-      {/* Top navigation bar */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="w-full justify-start rounded-none border-b bg-transparent p-0 h-10">
-          <TabsTrigger
-            value="feed"
-            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 py-2 text-sm"
+      {/* Error */}
+      {error && (
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {error}
+        </div>
+      )}
+
+      {/* Loading */}
+      {loading && activeTab !== 'following' && <SkeletonCards />}
+      {loading && activeTab === 'following' && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <UserCardSkeleton key={i} />
+          ))}
+        </div>
+      )}
+
+      {/* Empty state */}
+      {!loading && !error && activeTab !== 'following' && posts.length === 0 && (
+        <div className="flex flex-col items-center gap-4 py-24 text-center">
+          <GalaxyIcon size={52} className="text-muted-foreground/30" strokeWidth={1} />
+          <p className="text-muted-foreground">No posts yet.</p>
+          <p className="text-sm text-muted-foreground/50">
+            {activeTab === 'feed' && 'Publish a note from Forge to get started.'}
+            {activeTab === 'my-posts' && 'You have not published any posts yet.'}
+            {activeTab === 'my-favorites' && 'You have not favorited any posts yet.'}
+          </p>
+        </div>
+      )}
+      {!loading && !error && activeTab === 'following' && followingUsers.length === 0 && (
+        <div className="flex flex-col items-center gap-4 py-24 text-center">
+          <GalaxyIcon size={52} className="text-muted-foreground/30" strokeWidth={1} />
+          <p className="text-muted-foreground">Not following anyone yet.</p>
+          <p className="text-sm text-muted-foreground/50">
+            Follow users from their posts to see them here.
+          </p>
+        </div>
+      )}
+
+      {/* Content */}
+      {!loading && !error && activeTab !== 'following' && posts.length > 0 && (
+        <MasonryGrid>
+          {posts.map((post) => (
+            <PostCard key={post.id} post={post} onClick={() => setSelected(post)} />
+          ))}
+        </MasonryGrid>
+      )}
+
+      {!loading && !error && activeTab === 'following' && followingUsers.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {followingUsers.map((user) => (
+            <div
+              key={user.user_id}
+              className="rounded-lg border bg-card text-card-foreground p-4 space-y-3"
+            >
+              <div className="flex items-center gap-3">
+                <Avatar className="h-10 w-10">
+                  <AvatarFallback className="text-sm bg-primary/10 text-primary">
+                    {authorInitials(user.full_name)}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-foreground truncate">
+                    {user.full_name ?? 'Unknown'}
+                  </p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {user.email}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">
+                  {user.post_count} 帖子 · 关注于 {formatRelativeTime(user.followed_at)}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                  onClick={() => handleUnfollowUser(user.user_id)}
+                >
+                  取消关注
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {!loading && !error && activeTab !== 'following' && totalPages > 1 && (
+        <div className="flex items-center justify-center gap-2 pt-2">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={currentPage === 0}
+            onClick={() => setSkip(Math.max(0, skip - LIMIT))}
           >
-            全部
-          </TabsTrigger>
-          {/* 预留：我的帖子、我的收藏、关注的人 */}
-        </TabsList>
-
-        <TabsContent value="feed" className="mt-4 space-y-4">
-          {/* Error */}
-          {error && (
-            <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-              {error}
-            </div>
-          )}
-
-          {/* Loading */}
-          {loading && <SkeletonCards />}
-
-          {/* Empty state */}
-          {!loading && !error && posts.length === 0 && (
-            <div className="flex flex-col items-center gap-4 py-24 text-center">
-              <GalaxyIcon size={52} className="text-muted-foreground/30" strokeWidth={1} />
-              <p className="text-muted-foreground">No posts yet.</p>
-              <p className="text-sm text-muted-foreground/50">
-                Publish a note from Forge to get started.
-              </p>
-            </div>
-          )}
-
-          {/* Masonry waterfall */}
-          {!loading && posts.length > 0 && (
-            <MasonryGrid>
-              {posts.map((post) => (
-                <PostCard key={post.id} post={post} onClick={() => setSelected(post)} />
-              ))}
-            </MasonryGrid>
-          )}
-
-          {/* Pagination */}
-          {!loading && totalPages > 1 && (
-            <div className="flex items-center justify-center gap-2 pt-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={currentPage === 0}
-                onClick={() => setSkip(Math.max(0, skip - LIMIT))}
-              >
-                Previous
-              </Button>
-              <span className="text-sm text-muted-foreground">
-                {currentPage + 1} / {totalPages}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={currentPage >= totalPages - 1}
-                onClick={() => setSkip(skip + LIMIT)}
-              >
-                Next
-              </Button>
-            </div>
-          )}
-        </TabsContent>
-      </Tabs>
+            Previous
+          </Button>
+          <span className="text-sm text-muted-foreground">
+            {currentPage + 1} / {totalPages}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={currentPage >= totalPages - 1}
+            onClick={() => setSkip(skip + LIMIT)}
+          >
+            Next
+          </Button>
+        </div>
+      )}
 
       {/* Detail dialog */}
       <DetailDialog

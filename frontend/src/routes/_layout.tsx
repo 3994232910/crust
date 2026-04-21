@@ -1,4 +1,4 @@
-import { createFileRoute, Outlet, redirect, useLocation } from "@tanstack/react-router"
+import { createFileRoute, Outlet, redirect, useLocation, useNavigate } from "@tanstack/react-router"
 
 import { Footer } from "@/components/Common/Footer"
 import AppSidebar from "@/components/Sidebar/AppSidebar"
@@ -20,13 +20,47 @@ export const Route = createFileRoute("/_layout")({
   },
 })
 
+const communityTabs = [
+  { key: "feed", label: "全部" },
+  { key: "my-posts", label: "我的帖子" },
+  { key: "my-favorites", label: "我的收藏" },
+  { key: "following", label: "关注的人" },
+]
+
 function CommunityNav() {
+  const location = useLocation()
+  const navigate = useNavigate()
+  const search = new URLSearchParams(location.search)
+  const activeTab = search.get("tab") || "feed"
+
+  const setTab = (tab: string) => {
+    const next = new URLSearchParams(location.search)
+    if (tab === "feed") {
+      next.delete("tab")
+    } else {
+      next.set("tab", tab)
+    }
+    navigate({
+      to: location.pathname as any,
+      search: next.toString() as any,
+    })
+  }
+
   return (
     <nav className="flex items-center gap-1 ml-2">
-      <button className="px-3 py-1.5 text-sm font-medium rounded-md bg-muted text-foreground">
-        全部
-      </button>
-      {/* 预留：我的帖子、我的收藏、关注的人 */}
+      {communityTabs.map((tab) => (
+        <button
+          key={tab.key}
+          onClick={() => setTab(tab.key)}
+          className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+            activeTab === tab.key
+              ? "bg-muted text-foreground"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+          }`}
+        >
+          {tab.label}
+        </button>
+      ))}
     </nav>
   )
 }
