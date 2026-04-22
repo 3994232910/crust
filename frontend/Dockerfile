@@ -1,6 +1,9 @@
 # Stage 0, "build-stage", based on Bun, to build and compile the frontend
 FROM oven/bun:1 AS build-stage
 
+# 低内存模式：减少 bun 自身的内存占用
+ENV BUN_SMOL=1
+
 WORKDIR /app
 
 COPY package.json bun.lock /app/
@@ -9,12 +12,13 @@ COPY frontend/package.json /app/frontend/
 
 WORKDIR /app/frontend
 
-RUN bun install
+RUN bun install --frozen-lockfile
 
 COPY ./frontend /app/frontend
 ARG VITE_API_URL
 
-RUN NODE_OPTIONS="--max-old-space-size=1024" bun run build
+# 限制 Node/tsc/Vite 堆内存为 512MB，bun 本身走 BUN_SMOL
+RUN NODE_OPTIONS="--max-old-space-size=512" bun run build
 
 
 # Stage 1, based on Nginx, to have only the compiled app, ready for production with Nginx

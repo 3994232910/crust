@@ -13,6 +13,12 @@ export default defineConfig({
   define: {
     "process.env": {},
   },
+  build: {
+    rollupOptions: {
+      // 限制并行文件操作数，降低构建峰值内存
+      maxParallelFileOps: 5,
+    },
+  },
   plugins: [
     tanstackRouter({
       target: "react",
