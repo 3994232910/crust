@@ -12,6 +12,8 @@ COPY frontend/package.json /app/frontend/
 
 WORKDIR /app/frontend
 
+ENV BUN_CONFIG_REGISTRY=https://registry.npmmirror.com
+
 RUN bun install --frozen-lockfile
 
 COPY ./frontend /app/frontend
