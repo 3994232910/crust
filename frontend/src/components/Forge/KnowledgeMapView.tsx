@@ -457,7 +457,7 @@ export default function KnowledgeMapView({ onClose, embedded = false }: Knowledg
         <>
           <Canvas
             camera={{ position: cameraPos, fov: cameraFov }}
-            gl={{ antialias: false, powerPreference: "high-performance", clearColor: FOG_COLOR }}
+            gl={{ antialias: false, powerPreference: "high-performance" }}
             dpr={Math.min(window.devicePixelRatio, 2)}
           >
             <fog attach="fog" args={[FOG_COLOR, 45, 110]} />

@@ -18,7 +18,7 @@ export function Model3DViewerFrame({ modelPath, onModelClick }: Model3DViewerFra
   onModelClickRef.current = onModelClick
 
   // Mirror the default h-96 of Model3DRenderer; updates if the iframe reports taller content.
-  const [iframeHeight, setIframeHeight] = useState(384)
+  const [iframeHeight] = useState(384)
 
   useEffect(() => {
     function handleMessage(event: MessageEvent) {
