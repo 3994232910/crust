@@ -16,9 +16,7 @@ services:
       start_period: 30s
 
   backend:
-    build:
-      context: .
-      dockerfile: backend/Dockerfile
+    image: crpi-dt250i4xi4qqqjat-vpc.cn-hongkong.personal.cr.aliyuncs.com/crust-cyou/crust-backend:latest
     restart: unless-stopped
     env_file: .env.prod
     depends_on:
@@ -35,9 +33,7 @@ services:
                fastapi run --workers 2 app/main.py"
 
   frontend:
-    build:
-      context: .
-      dockerfile: frontend/Dockerfile.prebuilt
+    image: crpi-dt250i4xi4qqqjat-vpc.cn-hongkong.personal.cr.aliyuncs.com/crust-cyou/crust-frontend:latest
     restart: unless-stopped
     ports:
       - "80:80"
