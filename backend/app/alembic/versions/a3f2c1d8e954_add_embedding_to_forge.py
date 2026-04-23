@@ -19,18 +19,18 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # 启用 pgvector 扩展
-    op.execute("CREATE EXTENSION IF NOT EXISTS vector")
+    # TODO: 启用 pgvector 扩展（需要先安装 pgvector）
+    # op.execute("CREATE EXTENSION IF NOT EXISTS vector")
 
-    # 添加 embedding 列
-    op.add_column('forge', sa.Column('embedding', Vector(EMBEDDING_DIM), nullable=True))
+    # 添加 embedding 列（暂时使用文本类型）
+    op.add_column('forge', sa.Column('embedding', sa.Text, nullable=True))
 
-    # 创建 IVFFlat 近似最近邻索引（cosine distance）
-    # lists 参数建议为 sqrt(行数)，此处预设 100，数据量大时可调整
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS forge_embedding_ivfflat_idx "
-        "ON forge USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100)"
-    )
+    # TODO: 创建 IVFFlat 索引（需要 vector 扩展）
+    # op.execute(
+    #     "CREATE INDEX IF NOT EXISTS forge_embedding_ivfflat_idx "
+    #     "ON forge USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100)"
+    # )
+    pass
 
 
 def downgrade() -> None:

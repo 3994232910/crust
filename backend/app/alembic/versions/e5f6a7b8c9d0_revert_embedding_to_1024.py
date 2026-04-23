@@ -19,20 +19,26 @@ OLD_DIM = 1536
 
 
 def upgrade() -> None:
-    op.execute("DROP INDEX IF EXISTS forge_embedding_ivfflat_idx")
+    # TODO: 删除索引（需要 vector 扩展）
+    # op.execute("DROP INDEX IF EXISTS forge_embedding_ivfflat_idx")
     op.drop_column('forge', 'embedding')
-    op.add_column('forge', sa.Column('embedding', Vector(NEW_DIM), nullable=True))
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS forge_embedding_ivfflat_idx "
-        "ON forge USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100)"
-    )
+    op.add_column('forge', sa.Column('embedding', sa.Text, nullable=True))
+    # TODO: 创建索引（需要 vector 扩展）
+    # op.execute(
+    #     "CREATE INDEX IF NOT EXISTS forge_embedding_ivfflat_idx "
+    #     "ON forge USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100)"
+    # )
+    pass
 
 
 def downgrade() -> None:
-    op.execute("DROP INDEX IF EXISTS forge_embedding_ivfflat_idx")
+    # TODO: 删除索引（需要 vector 扩展）
+    # op.execute("DROP INDEX IF EXISTS forge_embedding_ivfflat_idx")
     op.drop_column('forge', 'embedding')
-    op.add_column('forge', sa.Column('embedding', Vector(OLD_DIM), nullable=True))
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS forge_embedding_ivfflat_idx "
-        "ON forge USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100)"
-    )
+    op.add_column('forge', sa.Column('embedding', sa.Text, nullable=True))
+    # TODO: 创建索引（需要 vector 扩展）
+    # op.execute(
+    #     "CREATE INDEX IF NOT EXISTS forge_embedding_ivfflat_idx "
+    #     "ON forge USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100)"
+    # )
+    pass

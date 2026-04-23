@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useLocation } from '@tanstack/react-router'
+import { useSearch } from '@tanstack/react-router'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -14,8 +14,6 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import useAuth from '@/hooks/useAuth'
 import { GalaxyIcon } from './GalaxyIcon'
-
-// ─── Types ─────────────────────────────────────────────────────────────────────
 
 interface CommunityPost {
   id: string
@@ -43,8 +41,6 @@ interface FollowingUser {
   followed_at: string
 }
 
-// ─── Helpers ───────────────────────────────────────────────────────────────────
-
 function authHeaders(): HeadersInit {
   const token = localStorage.getItem('access_token')
   return token ? { Authorization: `Bearer ${token}` } : {}
@@ -71,13 +67,12 @@ function authorInitials(name: string | null): string {
     .slice(0, 2)
 }
 
-/** Strip markdown syntax for preview text. */
 function contentSnippet(content: string | null, len = 200): string {
   if (!content) return ''
   const stripped = content
-    .replace(/!\[.*?\]\(.*?\)/g, '')      // images
-    .replace(/<model[^>]*>.*?<\/model>/gs, '') // model tags
-    .replace(/```[\s\S]*?```/g, '')        // code blocks
+    .replace(/!\[.*?\]\(.*?\)/g, '')
+    .replace(/<model[^>]*>.*?<\/model>/gs, '')
+    .replace(/```.*?```/gs, '')
     .replace(/`[^`]+`/g, '')
     .replace(/[#*_~>|`\[\]!]/g, '')
     .replace(/\s+/g, ' ')
@@ -85,22 +80,18 @@ function contentSnippet(content: string | null, len = 200): string {
   return stripped.length > len ? `${stripped.slice(0, len)}…` : stripped
 }
 
-/** Extract first markdown image URL from content. */
 function extractFirstImage(content: string | null): string | null {
   if (!content) return null
   const m = content.match(/!\[.*?\]\(([^)]+)\)/)
   return m ? m[1] : null
 }
 
-/** Resolve relative image URLs to include backend origin if needed. */
 function resolveImageUrl(src: string): string {
   if (src.startsWith('http') || src.startsWith('data:') || src.startsWith('/')) return src
   return src
 }
 
 const LIMIT = 20
-
-// ─── Masonry grid (CSS columns) ────────────────────────────────────────────────
 
 function MasonryGrid({ children }: { children: React.ReactNode }) {
   return (
@@ -109,8 +100,6 @@ function MasonryGrid({ children }: { children: React.ReactNode }) {
     </div>
   )
 }
-
-// ─── Post card ─────────────────────────────────────────────────────────────────
 
 interface PostCardProps {
   post: CommunityPost
@@ -124,13 +113,11 @@ function PostCard({ post, onClick }: PostCardProps) {
   const snippet = contentSnippet(post.content)
 
   return (
-    // break-inside-avoid keeps the card from splitting across columns
     <div
       className="break-inside-avoid mb-4 cursor-pointer group"
       onClick={onClick}
     >
       <div className="rounded-lg border bg-card text-card-foreground overflow-hidden transition-colors hover:border-border/80 hover:bg-accent/40">
-        {/* Thumbnail */}
         {imageUrl && (
           <div className="w-full overflow-hidden bg-muted">
             <img
@@ -144,19 +131,16 @@ function PostCard({ post, onClick }: PostCardProps) {
         )}
 
         <div className="p-4 space-y-2">
-          {/* Title */}
           <h3 className="font-medium text-sm leading-snug text-foreground">
             {post.title ?? 'Untitled'}
           </h3>
 
-          {/* Snippet — only if there's text beyond a title */}
           {snippet && (
             <p className="text-xs text-muted-foreground leading-relaxed">
               {snippet}
             </p>
           )}
 
-          {/* Footer */}
           <div className="flex items-center gap-2 pt-1">
             <Avatar className="h-5 w-5 shrink-0">
               <AvatarFallback className="text-[9px] bg-primary/10 text-primary">
@@ -176,10 +160,7 @@ function PostCard({ post, onClick }: PostCardProps) {
   )
 }
 
-// ─── Loading skeletons (masonry-aware) ─────────────────────────────────────────
-
 function SkeletonCards() {
-  // Vary heights to approximate masonry feel
   const heights = [120, 200, 160, 180, 140, 220, 150, 170, 130, 190, 160, 140]
   return (
     <MasonryGrid>
@@ -201,8 +182,6 @@ function SkeletonCards() {
   )
 }
 
-// ─── User card (for Following tab) ─────────────────────────────────────────────
-
 function UserCardSkeleton() {
   return (
     <div className="rounded-lg border bg-card p-4 space-y-3">
@@ -217,8 +196,6 @@ function UserCardSkeleton() {
     </div>
   )
 }
-
-// ─── Detail dialog ─────────────────────────────────────────────────────────────
 
 interface DetailDialogProps {
   post: CommunityPost | null
@@ -239,7 +216,6 @@ function DetailDialog({ post, onClose, onDelete, onFollowToggle, canDelete, dele
   return (
     <Dialog open={!!post} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col p-0 gap-0 overflow-hidden">
-        {/* Thumbnail banner */}
         {imageUrl && (
           <div className="w-full max-h-56 overflow-hidden bg-muted shrink-0">
             <img
@@ -311,13 +287,10 @@ function DetailDialog({ post, onClose, onDelete, onFollowToggle, canDelete, dele
   )
 }
 
-// ─── Main feed ─────────────────────────────────────────────────────────────────
-
 export function CommunityFeed() {
   const { user: currentUser } = useAuth()
-  const location = useLocation()
-  const search = new URLSearchParams(location.search)
-  const activeTab = search.get('tab') || 'feed'
+  const search = useSearch({ from: '/_layout/community' })
+  const activeTab = search.tab ?? 'feed'
 
   const [posts, setPosts] = useState<CommunityPost[]>([])
   const [followingUsers, setFollowingUsers] = useState<FollowingUser[]>([])
@@ -410,7 +383,6 @@ export function CommunityFeed() {
       })
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
 
-      // Optimistic update
       const nextFollowing = !post.is_following
       setPosts((prev) =>
         prev.map((p) =>
@@ -463,7 +435,6 @@ export function CommunityFeed() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center gap-3">
         <GalaxyIcon size={26} className="text-primary shrink-0" strokeWidth={1.4} />
         <div>
@@ -477,14 +448,12 @@ export function CommunityFeed() {
         )}
       </div>
 
-      {/* Error */}
       {error && (
         <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           {error}
         </div>
       )}
 
-      {/* Loading */}
       {loading && activeTab !== 'following' && <SkeletonCards />}
       {loading && activeTab === 'following' && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -494,7 +463,6 @@ export function CommunityFeed() {
         </div>
       )}
 
-      {/* Empty state */}
       {!loading && !error && activeTab !== 'following' && posts.length === 0 && (
         <div className="flex flex-col items-center gap-4 py-24 text-center">
           <GalaxyIcon size={52} className="text-muted-foreground/30" strokeWidth={1} />
@@ -516,7 +484,6 @@ export function CommunityFeed() {
         </div>
       )}
 
-      {/* Content */}
       {!loading && !error && activeTab !== 'following' && posts.length > 0 && (
         <MasonryGrid>
           {posts.map((post) => (
@@ -565,7 +532,6 @@ export function CommunityFeed() {
         </div>
       )}
 
-      {/* Pagination */}
       {!loading && !error && activeTab !== 'following' && totalPages > 1 && (
         <div className="flex items-center justify-center gap-2 pt-2">
           <Button
@@ -590,7 +556,6 @@ export function CommunityFeed() {
         </div>
       )}
 
-      {/* Detail dialog */}
       <DetailDialog
         post={selected}
         onClose={() => setSelected(null)}

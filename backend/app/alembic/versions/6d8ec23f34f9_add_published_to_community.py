@@ -27,7 +27,7 @@ def upgrade():
     sa.Column('is_published', sa.Boolean(), nullable=False),
     sa.Column('id', sa.Uuid(), nullable=False),
     sa.Column('owner_id', sa.Uuid(), nullable=False),
-    sa.Column('embedding', Vector(1024), nullable=True),
+    sa.Column('embedding', sa.Text(), nullable=True),  # TODO: 改回 Vector(1024) 当安装 pgvector 后
     sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False),
     sa.ForeignKeyConstraint(['owner_id'], ['user.id'], ),
@@ -67,7 +67,8 @@ def upgrade():
                existing_type=sa.TEXT(),
                type_=sqlmodel.sql.sqltypes.AutoString(),
                nullable=True)
-    op.drop_index(op.f('forge_embedding_ivfflat_idx'), table_name='forge', postgresql_ops={'embedding': 'vector_cosine_ops'}, postgresql_with={'lists': '100'}, postgresql_using='ivfflat')
+    # TODO: 删除 vector 索引（需要 pgvector 扩展）
+    # op.drop_index(op.f('forge_embedding_ivfflat_idx'), table_name='forge', postgresql_ops={'embedding': 'vector_cosine_ops'}, postgresql_with={'lists': '100'}, postgresql_using='ivfflat')
     op.create_index(op.f('ix_forge_owner_id'), 'forge', ['owner_id'], unique=False)
     op.drop_constraint(op.f('forge_parent_id_fkey'), 'forge', type_='foreignkey')
     op.drop_constraint(op.f('forge_owner_id_fkey'), 'forge', type_='foreignkey')
@@ -103,7 +104,8 @@ def downgrade():
     op.create_foreign_key(op.f('forge_owner_id_fkey'), 'forge', 'user', ['owner_id'], ['id'], ondelete='CASCADE')
     op.create_foreign_key(op.f('forge_parent_id_fkey'), 'forge', 'forge', ['parent_id'], ['id'])
     op.drop_index(op.f('ix_forge_owner_id'), table_name='forge')
-    op.create_index(op.f('forge_embedding_ivfflat_idx'), 'forge', ['embedding'], unique=False, postgresql_ops={'embedding': 'vector_cosine_ops'}, postgresql_with={'lists': '100'}, postgresql_using='ivfflat')
+    # TODO: 创建 vector 索引（需要 pgvector 扩展）
+    # op.create_index(op.f('forge_embedding_ivfflat_idx'), 'forge', ['embedding'], unique=False, postgresql_ops={'embedding': 'vector_cosine_ops'}, postgresql_with={'lists': '100'}, postgresql_using='ivfflat')
     op.alter_column('forge', 'content',
                existing_type=sqlmodel.sql.sqltypes.AutoString(),
                type_=sa.TEXT(),
