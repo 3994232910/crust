@@ -1,4 +1,4 @@
-import { createFileRoute, Outlet, redirect, useLocation, useNavigate } from "@tanstack/react-router"
+import { createFileRoute, Outlet, redirect, useLocation, useNavigate, useSearch } from "@tanstack/react-router"
 
 import { Footer } from "@/components/Common/Footer"
 import AppSidebar from "@/components/Sidebar/AppSidebar"
@@ -25,24 +25,29 @@ const communityTabs = [
   { key: "my-posts", label: "我的帖子" },
   { key: "my-favorites", label: "我的收藏" },
   { key: "following", label: "关注的人" },
-]
+] as const
+
+type CommunityTab = (typeof communityTabs)[number]["key"]
 
 function CommunityNav() {
   const location = useLocation()
   const navigate = useNavigate()
-  const search = new URLSearchParams(location.search)
-  const activeTab = search.get("tab") || "feed"
+  const search = useSearch({ from: "/_layout/community" })
+  const activeTab = search.tab ?? "feed"
 
-  const setTab = (tab: string) => {
-    const next = new URLSearchParams(location.search)
-    if (tab === "feed") {
-      next.delete("tab")
-    } else {
-      next.set("tab", tab)
-    }
+  const setTab = (tab: CommunityTab) => {
     navigate({
-      to: location.pathname as any,
-      search: next.toString() as any,
+      to: location.pathname,
+      search: (prev) => {
+        const next = { ...prev }
+        if (tab === "feed") {
+          delete next.tab
+        } else {
+          next.tab = tab
+        }
+        return next
+      },
+      replace: true,
     })
   }
 

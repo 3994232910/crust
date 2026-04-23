@@ -22,34 +22,36 @@ OLD_EMBEDDING_DIM = 1024
 
 
 def upgrade() -> None:
-    # 删除旧的索引
-    op.execute("DROP INDEX IF EXISTS forge_embedding_ivfflat_idx")
+    # TODO: 删除旧的索引（需要 vector 扩展）
+    # op.execute("DROP INDEX IF EXISTS forge_embedding_ivfflat_idx")
 
     # 删除旧的 embedding 列
     op.drop_column('forge', 'embedding')
 
-    # 添加新的 embedding 列（1536维）
-    op.add_column('forge', sa.Column('embedding', Vector(NEW_EMBEDDING_DIM), nullable=True))
+    # 添加新的 embedding 列（暂时使用文本类型）
+    op.add_column('forge', sa.Column('embedding', sa.Text, nullable=True))
 
-    # 重新创建 IVFFlat 索引
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS forge_embedding_ivfflat_idx "
-        "ON forge USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100)"
-    )
+    # TODO: 重新创建 IVFFlat 索引（需要 vector 扩展）
+    # op.execute(
+    #     "CREATE INDEX IF NOT EXISTS forge_embedding_ivfflat_idx "
+    #     "ON forge USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100)"
+    # )
+    pass
 
 
 def downgrade() -> None:
-    # 删除索引
-    op.execute("DROP INDEX IF EXISTS forge_embedding_ivfflat_idx")
+    # TODO: 删除索引（需要 vector 扩展）
+    # op.execute("DROP INDEX IF EXISTS forge_embedding_ivfflat_idx")
 
     # 删除新的 embedding 列
     op.drop_column('forge', 'embedding')
 
-    # 恢复旧的 embedding 列（1024维）
-    op.add_column('forge', sa.Column('embedding', Vector(OLD_EMBEDDING_DIM), nullable=True))
+    # 恢复旧的 embedding 列（暂时使用文本类型）
+    op.add_column('forge', sa.Column('embedding', sa.Text, nullable=True))
 
-    # 重新创建索引
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS forge_embedding_ivfflat_idx "
-        "ON forge USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100)"
-    )
+    # TODO: 重新创建索引（需要 vector 扩展）
+    # op.execute(
+    #     "CREATE INDEX IF NOT EXISTS forge_embedding_ivfflat_idx "
+    #     "ON forge USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100)"
+    # )
+    pass
