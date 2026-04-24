@@ -395,8 +395,9 @@ async def get_knowledge_map(
     notes_only = [f for f in forges if not f.is_folder]
     forges_with_emb = [f for f in notes_only if f.embedding is not None]
 
-    if len(forges_with_emb) < 2:
+    if len(forges_with_emb) < 3:
         return {
+            "status": "insufficient_notes",
             "nodes": [],
             "terrain": {"grid_x": [], "grid_y": [], "grid_z": []},
             "clusters": [],
@@ -491,7 +492,15 @@ async def get_knowledge_map(
             "clusters_raw": clusters_raw,
         }
 
-    map_data = await asyncio.to_thread(_compute)
+    try:
+        map_data = await asyncio.to_thread(_compute)
+    except Exception:
+        return {
+            "status": "computation_error",
+            "nodes": [],
+            "terrain": {"grid_x": [], "grid_y": [], "grid_z": []},
+            "clusters": [],
+        }
 
     # AI 为每个簇生成主题标签（失败时保留默认标签）
     clusters = []
@@ -528,6 +537,7 @@ async def get_knowledge_map(
         )
 
     return {
+        "status": "ok",
         "nodes": map_data["nodes"],
         "terrain": map_data["terrain"],
         "clusters": clusters,
