@@ -40,6 +40,7 @@ interface TerrainGrid {
 }
 
 interface MapData {
+  status?: "ok" | "insufficient_notes" | "computation_error"
   nodes: MapNode[]
   terrain: TerrainGrid
   clusters: ClusterInfo[]
@@ -433,9 +434,19 @@ export default function KnowledgeMapView({ onClose, embedded = false }: Knowledg
       {!loading && mapData && mapData.nodes.length === 0 && (
         <div className="flex flex-col items-center justify-center h-full gap-4 text-center px-8 max-w-lg mx-auto">
           <span className="text-5xl">🗺️</span>
-          <p className="text-slate-800 font-medium">知识地图暂无数据</p>
+          <p className="text-slate-800 font-medium">
+            {mapData.status === "insufficient_notes"
+              ? "这里还是空荡荡的宇宙，只有尘埃在舞动"
+              : mapData.status === "computation_error"
+                ? "沉淀的笔记飘荡在宇宙中，crust还未形成"
+                : "知识地图暂无数据"}
+          </p>
           <p className="text-sm text-slate-600 leading-relaxed">
-            创建至少 2 条笔记并生成向量后，地图将自动呈现。
+            {mapData.status === "insufficient_notes"
+              ? "添加更多的笔记来让丰富多彩的世界诞生吧！"
+              : mapData.status === "computation_error"
+                ? "继续努力吧！"
+                : "创建至少 2 条笔记并生成向量后，地图将自动呈现。"}
           </p>
           <Button
             onClick={handleRefreshEmbeddings}
