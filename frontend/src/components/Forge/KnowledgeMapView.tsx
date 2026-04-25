@@ -48,18 +48,18 @@ interface MapData {
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
-/** 主题色系：薄荷白平原 → 鼠尾草绿坡 → 深青绿山脊 */
-const LOW_COLOR  = new THREE.Color("#c8e8d8")   // 浅薄荷平原
-const MID_COLOR  = new THREE.Color("#3d9e6a")   // 中绿坡地
-const HIGH_COLOR = new THREE.Color("#0f5c3a")   // 深青绿山脊
+/** 主题色系：沙原 → 橙坡 → 中棕山脊（降饱和） */
+const LOW_COLOR  = new THREE.Color("#e3d5bd")   // 浅沙平原（低饱和）
+const MID_COLOR  = new THREE.Color("#ceae90")   // 橙坡（低饱和）
+const HIGH_COLOR = new THREE.Color("#957357")   // 中棕山脊（低饱和）
 
-/** 雾 / 背景色：薄雾白绿，让地形边缘消融入虚无 */
-const FOG_COLOR = "#eaf6ef"
+/** 雾 / 背景色（降饱和） */
+const FOG_COLOR = "#c2d5d7"
 
-/** 各聚类散点颜色（深绿系，与背景协调） */
+/** 各聚类散点颜色（橙棕系，降饱和） */
 const CLUSTER_COLORS = [
-  "#1a6b4a", "#2d8a5e", "#3fa870", "#1f7a55",
-  "#156040", "#0e4f33", "#24785a", "#187048",
+  "#b89070", "#a87858", "#c4a080", "#906848",
+  "#c8a888", "#886040", "#b89878", "#806038",
 ]
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -150,8 +150,8 @@ const TERRAIN_FRAG = /* glsl */`
   varying vec3 vNormal;
   varying vec3 vPosition;
 
-  // 薄雾白绿色
-  const vec3 FOG_TINT = vec3(0.918, 0.965, 0.937);
+  // 雾色（#c2d5d7，低饱和蓝灰）
+  const vec3 FOG_TINT = vec3(0.761, 0.835, 0.843);
 
   void main() {
     vec3 n = normalize(vNormal);
@@ -169,11 +169,11 @@ const TERRAIN_FRAG = /* glsl */`
 
     float lighting = 0.60 + diff1 * 0.65 + diff2 + rimUp;
 
-    // 低处向薄雾色混合（谷地更白更虚）
+    // 低处向薄雾色混合（谷地更白更虚，环境透明度降低）
     float valleyFog = 1.0 - smoothstep(0.0, 6.0, vPosition.y);
-    vec3 col = mix(vColor * lighting, FOG_TINT, valleyFog * 0.55);
+    vec3 col = mix(vColor * lighting, FOG_TINT, valleyFog * 0.30);
 
-    gl_FragColor = vec4(col, 1.0);
+    gl_FragColor = vec4(col, 0.80);
   }
 `
 
@@ -184,7 +184,7 @@ function TerrainMesh({ terrain }: { terrain: TerrainGrid }) {
   const geo = useMemo(() => buildTerrainGeometry(terrain), [terrain])
 
   const mat = useMemo(() => new THREE.ShaderMaterial({
-    transparent: false,
+    transparent: true,
     side:        THREE.FrontSide,
     vertexShader:   TERRAIN_VERT,
     fragmentShader: TERRAIN_FRAG,
@@ -246,11 +246,11 @@ function ClusterLabels({ clusters }: { clusters: ClusterInfo[] }) {
           key={c.id}
           position={[c.peak_x, terrainHeight(c.peak_z) + 3.0, c.peak_y]}
           fontSize={1.1}
-          color="#e0f5f3"
+          color="#fff8ee"
           anchorX="center"
           anchorY="middle"
           outlineWidth={0.08}
-          outlineColor="#004d40"
+          outlineColor="#5a2a00"
         >
           {c.label}
         </Text>
@@ -279,7 +279,7 @@ function DetailPanel({
         </Button>
       </div>
 
-      <div className="flex items-center gap-2 text-xs mb-4" style={{ color: "#009688" }}>
+      <div className="flex items-center gap-2 text-xs mb-4" style={{ color: "var(--accent)" }}>
         <FileText className="h-3 w-3" />
         <span>主题 {node.cluster_id + 1}</span>
         <span className="text-slate-600">·</span>
@@ -356,21 +356,21 @@ export default function KnowledgeMapView({ onClose, embedded = false }: Knowledg
     }
   }
 
-  // 嵌入模式：俯视角；全屏模式：低平侧视，强调波丘轮廓
+  // 嵌入模式：正面低角仰视长边；全屏模式：同
   const cameraPos = embedded
-    ? ([0, 50, 15] as [number, number, number])
-    : ([0, 18, 55] as [number, number, number])
-  const cameraFov = embedded ? 58 : 48
+    ? ([0, 0, 44] as [number, number, number])
+    : ([0, 0, 60] as [number, number, number])
+  const cameraFov = embedded ? 62 : 56
   const orbitTarget = embedded
-    ? ([0, 0, 0] as [number, number, number])
-    : ([0, 4, 0] as [number, number, number])
+    ? ([0, 12, 0] as [number, number, number])
+    : ([0, 16, 0] as [number, number, number])
 
   return (
-    <div className={embedded ? "relative w-full h-full" : "fixed inset-0 z-50"} style={{ background: FOG_COLOR }}>
+    <div className={embedded ? "relative w-full h-full" : "fixed inset-0 z-50"} style={{ background: `linear-gradient(to bottom, #7aaec8 0%, ${FOG_COLOR} 55%)` }}>
       {/* ── Header ── */}
       <div className="absolute top-4 left-4 right-4 z-10 flex justify-between items-center pointer-events-none">
         <div className="flex items-center gap-3 pointer-events-auto">
-          <Map className="h-5 w-5" style={{ color: "#009688" }} />
+          <Map className="h-5 w-5" style={{ color: "var(--accent)" }} />
           <h1 className="text-xl font-bold text-slate-800">Knowledge Map</h1>
           {mapData && (
             <span className="text-sm text-slate-600">
@@ -395,7 +395,7 @@ export default function KnowledgeMapView({ onClose, embedded = false }: Knowledg
         <div className="flex flex-col items-center justify-center h-full gap-4">
           <div
             className="w-12 h-12 rounded-full border-2 border-t-transparent animate-spin"
-            style={{ borderColor: "#15803d", borderTopColor: "transparent" }}
+            style={{ borderColor: "#eead72", borderTopColor: "transparent" }}
           />
           <p className="text-slate-700 text-sm">
             正在生成知识地图，首次可能需要 10–30 秒…
@@ -413,7 +413,7 @@ export default function KnowledgeMapView({ onClose, embedded = false }: Knowledg
             onClick={handleRefreshEmbeddings}
             disabled={refreshing}
             className="mt-1 gap-2"
-            style={{ background: "#15803d", color: "#fff" }}
+            style={{ background: "#eead72", color: "#3d2200" }}
           >
             <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
             {refreshing ? "正在触发…" : "重新生成所有向量"}
@@ -452,7 +452,7 @@ export default function KnowledgeMapView({ onClose, embedded = false }: Knowledg
             onClick={handleRefreshEmbeddings}
             disabled={refreshing}
             className="mt-1 gap-2"
-            style={{ background: "#15803d", color: "#fff" }}
+            style={{ background: "#eead72", color: "#3d2200" }}
           >
             <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
             {refreshing ? "正在触发…" : "生成向量"}
@@ -470,12 +470,27 @@ export default function KnowledgeMapView({ onClose, embedded = false }: Knowledg
             camera={{ position: cameraPos, fov: cameraFov }}
             gl={{ antialias: false, powerPreference: "high-performance" }}
             dpr={Math.min(window.devicePixelRatio, 2)}
+            onCreated={({ gl }) => {
+              const canvas = gl.domElement
+              const parent = canvas.parentElement as HTMLElement
+              const origSetSize = gl.setSize.bind(gl)
+              // getBoundingClientRect() returns zoomed (visual) size when a CSS zoom
+              // ancestor is present, causing Three.js to write a too-small pixel value
+              // into canvas.style.width/height. offsetWidth/offsetHeight are unaffected
+              // by ancestor zoom and return the actual layout size, so we use those.
+              ;(gl as unknown as { setSize: typeof gl.setSize }).setSize = (
+                _w: number,
+                _h: number,
+                updateStyle?: boolean,
+              ) => origSetSize(parent.offsetWidth, parent.offsetHeight, updateStyle)
+              origSetSize(parent.offsetWidth, parent.offsetHeight, true)
+            }}
           >
             <fog attach="fog" args={[FOG_COLOR, 45, 110]} />
 
             <ambientLight intensity={0.7} color="#ffffff" />
             <directionalLight position={[15, 35, 15]} intensity={1.2} color="#ffffff" />
-            <directionalLight position={[-12, 18, -12]} intensity={0.3} color="#bbf7d0" />
+            <directionalLight position={[-12, 18, -12]} intensity={0.3} color="#f5d9a8" />
 
             <TerrainMesh terrain={mapData.terrain} />
             <NotePoints

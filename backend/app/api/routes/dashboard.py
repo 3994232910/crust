@@ -177,10 +177,13 @@ def get_evolution_data(session: SessionDep, current_user: CurrentUser) -> Dashbo
 
 @router.get("/tasks", response_model=List[TaskPublic])
 def read_tasks(session: SessionDep, current_user: CurrentUser) -> List[TaskPublic]:
-    tasks = _get_tasks(session, current_user.id)
-    if not tasks:
+    all_tasks = _get_tasks(session, current_user.id)
+    if not all_tasks:
         _seed_default_tasks(session, current_user.id)
-        tasks = _get_tasks(session, current_user.id)
+        all_tasks = _get_tasks(session, current_user.id)
+
+    today = datetime.now(timezone.utc).date()
+    tasks = [t for t in all_tasks if not t.completed or t.updated_at.date() == today]
     return [_task_to_public(t) for t in tasks]
 
 

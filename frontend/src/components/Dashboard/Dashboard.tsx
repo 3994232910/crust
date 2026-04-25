@@ -1,12 +1,10 @@
 ﻿import { useCallback, useEffect, useState } from 'react'
-import { useTheme } from 'next-themes'
 import { DashboardShell } from '../layout/DashboardShell'
-import { DashboardHeader } from '../layout/DashboardHeader'
 import { LeftRail } from '../layout/LeftRail'
 import KnowledgeMapView from '../Forge/KnowledgeMapView'
 import { CenterBottom } from '../layout/CenterBottom'
 import { RightPanel } from '../layout/RightPanel'
-import type { ActivityData, DashboardData, DashboardLog, DashboardTask, EvolutionStage, KanbanData, WeekPlanDay } from '@/types/dashboard'
+import type { ActivityData, DashboardData, DashboardTask, EvolutionStage, KanbanData, WeekPlanDay } from '@/types/dashboard'
 
 const apiPrefix = '/api/v1/dashboard'
 
@@ -20,26 +18,23 @@ async function apiFetch(url: string, init?: RequestInit): Promise<Response> {
 }
 
 export function DashboardPage() {
-  const { theme, setTheme } = useTheme()
   const [dashboard, setDashboard] = useState<DashboardData | null>(null)
   const [tasks, setTasks] = useState<DashboardTask[]>([])
-  const [_logs, setLogs] = useState<DashboardLog[]>([])
   const [weekPlan, setWeekPlan] = useState<WeekPlanDay[]>([])
   const [kanban, setKanban] = useState<KanbanData>({ todo: [], processing: [], done: [] })
   const [heatmapData, setHeatmapData] = useState<Array<{ date: string; count: number }>>([])
   const [trendData, setTrendData] = useState<number[]>([])
   const [busyTaskId, setBusyTaskId] = useState<string | null>(null)
-  const [isSubmittingLog, setIsSubmittingLog] = useState(false)
+  const [isSubmittingTask, setIsSubmittingTask] = useState(false)
   const [_isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   const refreshAll = useCallback(async () => {
     try {
       setIsLoading(true)
-      const [dashboardDataResponse, tasksDataResponse, logsDataResponse, weekPlanResponse, kanbanResponse, activityResponse] = await Promise.all([
+      const [dashboardDataResponse, tasksDataResponse, weekPlanResponse, kanbanResponse, activityResponse] = await Promise.all([
         apiFetch(`${apiPrefix}/evolution`),
         apiFetch(`${apiPrefix}/tasks`),
-        apiFetch(`${apiPrefix}/logs`),
         apiFetch(`${apiPrefix}/week-plan`),
         apiFetch(`${apiPrefix}/kanban`),
         apiFetch(`${apiPrefix}/activity`),
@@ -47,21 +42,18 @@ export function DashboardPage() {
 
       if (!dashboardDataResponse.ok) throw new Error(`Failed to fetch dashboard: ${dashboardDataResponse.statusText}`)
       if (!tasksDataResponse.ok) throw new Error(`Failed to fetch tasks: ${tasksDataResponse.statusText}`)
-      if (!logsDataResponse.ok) throw new Error(`Failed to fetch logs: ${logsDataResponse.statusText}`)
       if (!weekPlanResponse.ok) throw new Error(`Failed to fetch week-plan: ${weekPlanResponse.statusText}`)
       if (!kanbanResponse.ok) throw new Error(`Failed to fetch kanban: ${kanbanResponse.statusText}`)
       if (!activityResponse.ok) throw new Error(`Failed to fetch activity: ${activityResponse.statusText}`)
 
       const dashboardData = (await dashboardDataResponse.json()) as DashboardData
       const tasksData = (await tasksDataResponse.json()) as DashboardTask[]
-      const logsData = (await logsDataResponse.json()) as DashboardLog[]
       const weekPlanData = (await weekPlanResponse.json()) as WeekPlanDay[]
       const kanbanData = (await kanbanResponse.json()) as KanbanData
       const activityData = (await activityResponse.json()) as ActivityData
 
       setDashboard(dashboardData)
       setTasks(tasksData)
-      setLogs(logsData)
       setWeekPlan(weekPlanData)
       setKanban(kanbanData)
       setHeatmapData(activityData.heatmap)
@@ -101,30 +93,29 @@ export function DashboardPage() {
     }
   }
 
-  const handleCreateLog = async (content: string) => {
-    setIsSubmittingLog(true)
+  const handleCreateTask = async (content: string) => {
+    setIsSubmittingTask(true)
     try {
-      const response = await apiFetch(`${apiPrefix}/logs`, {
+      const response = await apiFetch(`${apiPrefix}/tasks`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content }),
+        body: JSON.stringify({ title: content, priority: 'medium', energy: 10 }),
       })
-      if (!response.ok) throw new Error(`日志创建失败: ${response.statusText}`)
-      const log = (await response.json()) as DashboardLog
-      setLogs(prev => [log, ...prev])
-      await refreshAll()
+      if (!response.ok) throw new Error(`任务创建失败: ${response.statusText}`)
+      const task = (await response.json()) as DashboardTask
+      setTasks(prev => [...prev, task])
     } catch (error) {
-      const message = error instanceof Error ? error.message : '日志创建失败'
+      const message = error instanceof Error ? error.message : '任务创建失败'
       setError(message)
     } finally {
-      setIsSubmittingLog(false)
+      setIsSubmittingTask(false)
     }
   }
 
   // backend unavailable — render with mock data, show a non-blocking banner
 
+  const currentStage: EvolutionStage = (dashboard?.evolution_level.stage as EvolutionStage) ?? 'hadean'
   const isReadyToUpgrade = dashboard?.evolution_level.ready_for_upgrade ?? false
-  const currentStage = (dashboard?.evolution_level.stage ?? 'hadean') as EvolutionStage
 
   return (
     <>
@@ -135,14 +126,6 @@ export function DashboardPage() {
         </div>
       )}
     <DashboardShell
-      header={
-        <DashboardHeader
-          productName="Knowledge Core"
-          currentStage={currentStage}
-          isDarkMode={theme === 'dark'}
-          onToggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-        />
-      }
       leftRail={
         <LeftRail
           stage={currentStage}
@@ -159,7 +142,7 @@ export function DashboardPage() {
           trendData={trendData}
         />
       }
-      centerTop={<div className="h-96 w-full"><KnowledgeMapView embedded /></div>}
+      centerTop={<div className="h-full w-full"><KnowledgeMapView embedded /></div>}
       centerBottom={<CenterBottom weekPlan={weekPlan} kanban={kanban} />}
       rightPanel={
         <RightPanel
@@ -168,8 +151,8 @@ export function DashboardPage() {
             taskComplete: tasks.filter(t => t.completed).length,
             taskTotal: tasks.length,
           }}
-          onLogSubmit={handleCreateLog}
-          isSubmittingLog={isSubmittingLog}
+          onTaskCreate={handleCreateTask}
+          isSubmittingTask={isSubmittingTask}
           tasks={tasks}
           onTaskToggle={handleToggleTask}
           busyTaskId={busyTaskId}

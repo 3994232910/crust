@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import type React from 'react'
 
 interface HeatmapCalendarProps {
   data: { date: string; count: number }[]
@@ -25,11 +26,10 @@ export function HeatmapCalendar({ data }: HeatmapCalendarProps) {
     return weeks
   }, [data])
 
-  const getStyle = (count: number) => {
-    if (count === 0) return 'bg-muted'
-    if (count <= 1) return 'bg-chart-2/40'
-    if (count <= 3) return 'bg-chart-2/70'
-    return 'bg-chart-2'
+  const getStyle = (count: number): React.CSSProperties => {
+    if (count === 0) return { backgroundColor: 'var(--muted)' }
+    const pct = count <= 1 ? 30 : count <= 3 ? 60 : 100
+    return { backgroundColor: `color-mix(in oklch, var(--accent) ${pct}%, var(--background))` }
   }
 
   return (
@@ -41,26 +41,23 @@ export function HeatmapCalendar({ data }: HeatmapCalendarProps) {
       <div className="flex gap-1">
         {weeks.map((week, weekIndex) => (
           <div key={weekIndex} className="flex flex-col gap-1">
-            {week.map((day) => {
-              const styleClass = getStyle(day.count)
-              return (
-                <div
-                  key={day.date}
-                  className={`rounded-sm ${styleClass}`}
-                  style={{ width: 8, height: 8 }}
-                  title={`${day.date}: ${day.count}`}
-                />
-              )
-            })}
+            {week.map((day) => (
+              <div
+                key={day.date}
+                className="rounded-sm"
+                style={{ width: 8, height: 8, ...getStyle(day.count) }}
+                title={`${day.date}: ${day.count}`}
+              />
+            ))}
           </div>
         ))}
       </div>
       <div className="mt-3 flex items-center gap-2 text-xs text-text-secondary">
         <span>少</span>
-        <span className="w-2 h-2 rounded-sm bg-muted inline-block" />
-        <span className="w-2 h-2 rounded-sm bg-chart-2/40 inline-block" />
-        <span className="w-2 h-2 rounded-sm bg-chart-2/70 inline-block" />
-        <span className="w-2 h-2 rounded-sm bg-chart-2 inline-block" />
+        <span className="w-2 h-2 rounded-sm inline-block" style={{ backgroundColor: 'var(--muted)' }} />
+        <span className="w-2 h-2 rounded-sm inline-block" style={{ backgroundColor: 'color-mix(in oklch, var(--accent) 30%, var(--background))' }} />
+        <span className="w-2 h-2 rounded-sm inline-block" style={{ backgroundColor: 'color-mix(in oklch, var(--accent) 60%, var(--background))' }} />
+        <span className="w-2 h-2 rounded-sm inline-block" style={{ backgroundColor: 'var(--accent)' }} />
         <span>多</span>
       </div>
     </div>
