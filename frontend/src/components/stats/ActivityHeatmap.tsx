@@ -1,24 +1,25 @@
+import type React from 'react'
+
 interface ActivityHeatmapProps {
   data: number[][]
 }
 
 export function ActivityHeatmap({ data }: ActivityHeatmapProps) {
-  const getIntensityColor = (value: number) => {
-    if (value === 0) return 'bg-slate-700'
-    if (value <= 2) return 'bg-cyan-900'
-    if (value <= 5) return 'bg-cyan-700'
-    if (value <= 8) return 'bg-cyan-500'
-    return 'bg-cyan-300'
+  const getIntensityStyle = (value: number): React.CSSProperties => {
+    if (value === 0) return { backgroundColor: 'color-mix(in oklch, var(--accent) 10%, var(--background))' }
+    const pct = value <= 2 ? 25 : value <= 5 ? 50 : value <= 8 ? 75 : 100
+    return { backgroundColor: `color-mix(in oklch, var(--accent) ${pct}%, var(--background))` }
   }
 
   return (
-    <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl p-6 border border-slate-700">
-      <h3 className="text-sm font-semibold text-slate-200 mb-4 uppercase tracking-wider">活动热力图</h3>
+    <div className="bg-panel backdrop-blur-sm rounded-xl p-6 border border-border">
+      <h3 className="text-sm font-semibold text-text-primary mb-4 uppercase tracking-wider">活动热力图</h3>
       <div className="grid grid-cols-7 gap-1">
         {data.flat().map((value, index) => (
           <div
             key={index}
-            className={`w-3 h-3 rounded-sm ${getIntensityColor(value)}`}
+            className="w-3 h-3 rounded-sm"
+            style={getIntensityStyle(value)}
             title={`活动: ${value}`}
           />
         ))}

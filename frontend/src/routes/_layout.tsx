@@ -73,12 +73,13 @@ function CommunityNav() {
 function Layout() {
   const location = useLocation()
   const isForgePage = location.pathname === "/forge"
+  const isDashboardPage = location.pathname === "/"
   const isCommunityPage = location.pathname === "/community"
 
   return (
-    <SidebarProvider className={isForgePage ? "h-svh overflow-hidden" : ""}>
+    <SidebarProvider className={(isForgePage || isDashboardPage) ? "h-svh overflow-hidden" : ""}>
       <AppSidebar />
-      <SidebarInset className={isForgePage ? "overflow-hidden" : ""}>
+      <SidebarInset className={(isForgePage || isDashboardPage) ? "overflow-hidden flex flex-col" : ""}>
         {!isForgePage && (
           <header className="sticky top-0 z-10 flex h-16 shrink-0 items-center gap-2 border-b px-4">
             <SidebarTrigger className="-ml-1 text-muted-foreground" />
@@ -87,6 +88,10 @@ function Layout() {
         )}
         {isForgePage ? (
           <main className="flex-1 overflow-hidden h-full">
+            <Outlet />
+          </main>
+        ) : isDashboardPage ? (
+          <main className="flex-1 overflow-hidden min-h-0">
             <Outlet />
           </main>
         ) : (

@@ -24,8 +24,8 @@ export function TrendSparkline({ data }: TrendSparklineProps) {
           <title>Activity trend</title>
           <defs>
             <linearGradient id="trendGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stopColor="var(--color-chart-2)" stopOpacity="0.35" />
-              <stop offset="100%" stopColor="var(--color-chart-2)" stopOpacity="0" />
+              <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.35" />
+              <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
             </linearGradient>
           </defs>
           <polygon
@@ -34,7 +34,7 @@ export function TrendSparkline({ data }: TrendSparklineProps) {
           />
           <polyline
             fill="none"
-            stroke="var(--color-chart-2)"
+            stroke="var(--accent)"
             strokeWidth="2"
             points={points}
           />

@@ -28,7 +28,7 @@ export function TaskComposer({ onSubmit, isSubmitting }: TaskComposerProps) {
               handleSubmit()
             }
           }}
-          placeholder="记录今日内容，Ctrl+Enter 提交"
+          placeholder="添加今日任务，Ctrl+Enter 提交"
           className="w-full bg-panel-hover border border-border rounded-md p-3 text-sm leading-5 resize-none min-h-[90px] focus:outline-none focus:ring-1 focus:ring-accent"
           rows={3}
         />

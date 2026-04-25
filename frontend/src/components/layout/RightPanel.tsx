@@ -8,14 +8,14 @@ interface RightPanelProps {
     taskComplete: number
     taskTotal: number
   }
-  onLogSubmit: (content: string) => void
-  isSubmittingLog?: boolean
+  onTaskCreate: (content: string) => void
+  isSubmittingTask?: boolean
   tasks: DashboardTask[]
   onTaskToggle: (task: DashboardTask) => void
   busyTaskId?: string | null
 }
 
-export function RightPanel({ energy, onLogSubmit, isSubmittingLog, tasks, onTaskToggle, busyTaskId }: RightPanelProps) {
+export function RightPanel({ energy, onTaskCreate, isSubmittingTask, tasks, onTaskToggle, busyTaskId }: RightPanelProps) {
   return (
     <aside className="w-96 p-4 space-y-4 overflow-y-auto">
       <div className="border border-border bg-panel rounded-lg p-3 flex items-center justify-between">
@@ -26,7 +26,7 @@ export function RightPanel({ energy, onLogSubmit, isSubmittingLog, tasks, onTask
         <span className="text-lg font-semibold text-accent">+{energy.today}</span>
       </div>
 
-      <TaskComposer onSubmit={onLogSubmit} isSubmitting={isSubmittingLog} />
+      <TaskComposer onSubmit={onTaskCreate} isSubmitting={isSubmittingTask} />
       <TaskList tasks={tasks} onToggleTask={onTaskToggle} busyTaskId={busyTaskId ?? undefined} />
     </aside>
   )

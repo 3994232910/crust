@@ -1,26 +1,31 @@
 import { ReactNode } from 'react'
 
 interface DashboardShellProps {
-  header: ReactNode
+  header?: ReactNode
   leftRail: ReactNode
   centerTop: ReactNode
   centerBottom: ReactNode
   rightPanel: ReactNode
 }
 
+const ZOOM = 0.65
+
 export function DashboardShell({ header, leftRail, centerTop, centerBottom, rightPanel }: DashboardShellProps) {
   return (
-    <div className="min-h-screen bg-background text-foreground overflow-hidden">
+    <div
+      className="bg-background text-foreground overflow-hidden flex flex-col"
+      style={{ zoom: ZOOM, height: `calc(100vh / ${ZOOM})` }}
+    >
       {header}
-      <div className="flex flex-col lg:flex-row h-[calc(100vh-80px)]">
+      <div className="flex flex-col lg:flex-row flex-1 min-h-0">
         <aside className="w-full lg:w-80 border-b lg:border-b-0 lg:border-r border-border bg-sidebar overflow-y-auto overflow-x-hidden">
           {leftRail}
         </aside>
-        <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-          <div className="border-b border-border bg-background">
+        <main className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
+          <div className="h-96 flex-none overflow-hidden border-b border-border bg-background">
             {centerTop}
           </div>
-          <div className="flex-1 overflow-hidden">
+          <div className="flex-1 min-h-0 overflow-hidden">
             {centerBottom}
           </div>
         </main>
