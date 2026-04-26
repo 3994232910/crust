@@ -18,6 +18,7 @@ RUN bun install --frozen-lockfile
 
 COPY ./frontend /app/frontend
 ARG VITE_API_URL
+ENV VITE_API_URL=$VITE_API_URL
 
 # 限制 Node/tsc/Vite 堆内存为 512MB，bun 本身走 BUN_SMOL
 RUN NODE_OPTIONS="--max-old-space-size=512" bun run build
