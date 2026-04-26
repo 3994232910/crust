@@ -1,10 +1,9 @@
-FROM registry.cn-hangzhou.aliyuncs.com/library/python:3.10
+FROM docker.m.daocloud.io/library/python:3.10
 
 ENV PYTHONUNBUFFERED=1
 
 # Install uv
-# Ref: https://docs.astral.sh/uv/guides/integration/docker/#installing-uv
-COPY --from=ghcr.io/astral-sh/uv:0.9.26 /uv /uvx /bin/
+RUN pip install uv==0.9.26 -i https://mirrors.aliyun.com/pypi/simple/
 
 # Compile bytecode
 # Ref: https://docs.astral.sh/uv/guides/integration/docker/#compiling-bytecode
