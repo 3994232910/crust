@@ -109,6 +109,11 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD?Variable not set}
       - SENTRY_DSN=${SENTRY_DSN}
 
+    volumes:
+      - app-models:/app/backend/models
+      - app-avatars:/app/backend/avatars
+      - app-thumbnails:/app/backend/thumbnails
+
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/utils/health-check/"]
       interval: 10s
@@ -167,6 +172,9 @@ services:
       - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-http.middlewares=https-redirect
 volumes:
   app-db-data:
+  app-models:
+  app-avatars:
+  app-thumbnails:
 
 networks:
   traefik-public:
