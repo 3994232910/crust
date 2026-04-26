@@ -1,4 +1,4 @@
-FROM python:3.10
+FROM registry.cn-hangzhou.aliyuncs.com/library/python:3.10
 
 ENV PYTHONUNBUFFERED=1
 
