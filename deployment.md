@@ -1,204 +1,205 @@
-# FastAPI Project - Deployment
+# Crust - 部署指南
 
-You can deploy the project using Docker Compose to a remote server.
+你可以使用 Docker Compose 将项目部署到远程服务器。
 
-This project expects you to have a Traefik proxy handling communication to the outside world and HTTPS certificates.
+本项目期望使用 Traefik 反向代理处理外部通信和 HTTPS 证书。
 
-You can use CI/CD (continuous integration and continuous deployment) systems to deploy automatically, there are already configurations to do it with GitHub Actions.
+你可以使用 CI/CD（持续集成和持续部署）系统自动部署，项目中已包含 GitHub Actions 配置。
 
-But you have to configure a couple things first. 🤓
+但在开始之前，你需要先配置一些必要的环境变量和基础设施。
 
-## Preparation
+## 准备工作
 
-* Have a remote server ready and available.
-* Configure the DNS records of your domain to point to the IP of the server you just created.
-* Configure a wildcard subdomain for your domain, so that you can have multiple subdomains for different services, e.g. `*.fastapi-project.example.com`. This will be useful for accessing different components, like `dashboard.fastapi-project.example.com`, `api.fastapi-project.example.com`, `traefik.fastapi-project.example.com`, `adminer.fastapi-project.example.com`, etc. And also for `staging`, like `dashboard.staging.fastapi-project.example.com`, `adminer.staging.fastapi-project.example.com`, etc.
-* Install and configure [Docker](https://docs.docker.com/engine/install/) on the remote server (Docker Engine, not Docker Desktop).
+- 准备一台可用的远程服务器
+- 配置域名的 DNS 记录，指向你创建的服务器 IP
+- 配置通配符子域名（如 *.crust.cyou），以便为不同服务创建多个子域名
+  - 例如：dashboard.crust.cyou、api.crust.cyou、traefik.crust.cyou、adminer.crust.cyou
+  - 也适用于 staging 环境：dashboard.staging.crust.cyou、adminer.staging.crust.cyou
+- 在远程服务器上安装并配置 Docker（Docker Engine，非 Docker Desktop）
 
-## Public Traefik
+## 公共 Traefik 代理
 
-We need a Traefik proxy to handle incoming connections and HTTPS certificates.
+我们需要一个 Traefik 代理来处理 incoming 连接和 HTTPS 证书。
 
-You need to do these next steps only once.
+以下步骤只需执行一次。
 
-### Traefik Docker Compose
+### Traefik Docker Compose 配置
 
-* Create a remote directory to store your Traefik Docker Compose file:
+- 在远程服务器上创建目录用于存放 Traefik Docker Compose 文件：
 
 ```bash
 mkdir -p /root/code/traefik-public/
 ```
 
-Copy the Traefik Docker Compose file to your server. You could do it by running the command `rsync` in your local terminal:
+- 将 Traefik Docker Compose 文件复制到你的服务器。在本地终端执行：
 
 ```bash
 rsync -a compose.traefik.yml root@your-server.example.com:/root/code/traefik-public/
 ```
 
-### Traefik Public Network
+### 创建 Traefik 公共网络
 
-This Traefik will expect a Docker "public network" named `traefik-public` to communicate with your stack(s).
+Traefik 需要一个名为 `traefik-public` 的 Docker 公共网络来与你的应用栈通信。
 
-This way, there will be a single public Traefik proxy that handles the communication (HTTP and HTTPS) with the outside world, and then behind that, you could have one or more stacks with different domains, even if they are on the same single server.
+这样可以实现单个公共 Traefik 代理处理所有 HTTP 和 HTTPS 流量，背后可以运行一个或多个不同的应用栈，即使它们在同一台服务器上。
 
-To create a Docker "public network" named `traefik-public` run the following command in your remote server:
+在远程服务器上执行以下命令创建 Docker 公共网络：
 
 ```bash
 docker network create traefik-public
 ```
 
-### Traefik Environment Variables
+### 设置 Traefik 环境变量
 
-The Traefik Docker Compose file expects some environment variables to be set in your terminal before starting it. You can do it by running the following commands in your remote server.
+Traefik Docker Compose 文件需要设置一些环境变量。在远程服务器上执行以下命令：
 
-* Create the username for HTTP Basic Auth, e.g.:
+- 创建 HTTP Basic Auth 用户名：
 
 ```bash
 export USERNAME=admin
 ```
 
-* Create an environment variable with the password for HTTP Basic Auth, e.g.:
+- 创建 HTTP Basic Auth 密码：
 
 ```bash
 export PASSWORD=changethis
 ```
 
-* Use openssl to generate the "hashed" version of the password for HTTP Basic Auth and store it in an environment variable:
+- 使用 openssl 生成密码的哈希值并存储到环境变量：
 
 ```bash
 export HASHED_PASSWORD=$(openssl passwd -apr1 $PASSWORD)
 ```
 
-To verify that the hashed password is correct, you can print it:
+验证哈希密码是否正确：
 
 ```bash
 echo $HASHED_PASSWORD
 ```
 
-* Create an environment variable with the domain name for your server, e.g.:
+- 设置服务器域名：
 
 ```bash
-export DOMAIN=fastapi-project.example.com
+export DOMAIN=crust.cyou
 ```
 
-* Create an environment variable with the email for Let's Encrypt, e.g.:
+- 设置 Let's Encrypt 邮箱（用于 SSL 证书）：
 
 ```bash
-export EMAIL=admin@example.com
+export EMAIL=admin@crust.cyou
 ```
 
-**Note**: you need to set a different email, an email `@example.com` won't work.
+注意：必须使用真实有效的邮箱地址，@example.com 无法通过验证。
 
-### Start the Traefik Docker Compose
+### 启动 Traefik
 
-Go to the directory where you copied the Traefik Docker Compose file in your remote server:
+进入 Traefik Docker Compose 文件所在目录：
 
 ```bash
 cd /root/code/traefik-public/
 ```
 
-Now with the environment variables set and the `compose.traefik.yml` in place, you can start the Traefik Docker Compose running the following command:
+环境变量设置完成后，启动 Traefik：
 
 ```bash
 docker compose -f compose.traefik.yml up -d
 ```
 
-## Deploy the FastAPI Project
+## 部署 Crust 应用
 
-Now that you have Traefik in place you can deploy your FastAPI project with Docker Compose.
+Traefik 就绪后，你可以使用 Docker Compose 部署 Crust 应用。
 
-**Note**: You might want to jump ahead to the section about Continuous Deployment with GitHub Actions.
+注意：你也可以直接使用 GitHub Actions 进行自动化部署（见下文）。
 
-## Copy the Code
+### 复制代码到服务器
 
 ```bash
 rsync -av --filter=":- .gitignore" ./ root@your-server.example.com:/root/code/app/
 ```
 
-Note: `--filter=":- .gitignore"` tells `rsync` to use the same rules as git, ignore files ignored by git, like the Python virtual environment.
+说明：`--filter=":- .gitignore"` 让 rsync 遵循 git 的忽略规则，排除虚拟环境等不必要的文件。
 
-## Environment Variables
+### 设置环境变量
 
-You need to set some environment variables first.
+#### 生成密钥
 
-### Generate secret keys
+`.env` 文件中部分变量的默认值为 `changethis`，你需要替换为安全的密钥。
 
-Some environment variables in the `.env` file have a default value of `changethis`.
-
-You have to change them with a secret key, to generate secret keys you can run the following command:
+生成安全密钥：
 
 ```bash
 python -c "import secrets; print(secrets.token_urlsafe(32))"
 ```
 
-Copy the content and use that as password / secret key. And run that again to generate another secure key.
+复制输出内容作为密码或密钥，可多次执行以生成不同的密钥。
 
-### Required Environment Variables
+#### 必需的环境变量
 
-Set the `ENVIRONMENT`, by default `local` (for development), but when deploying to a server you would put something like `staging` or `production`:
+设置环境变量 `ENVIRONMENT`，默认为 `local`（开发环境），部署时设置为 `staging` 或 `production`：
 
 ```bash
 export ENVIRONMENT=production
 ```
 
-Set the `DOMAIN`, by default `localhost` (for development), but when deploying you would use your own domain, for example:
+设置 `DOMAIN`，默认为 `localhost`（开发环境），部署时使用你的实际域名：
 
 ```bash
-export DOMAIN=fastapi-project.example.com
+export DOMAIN=crust.cyou
 ```
 
-Set the `POSTGRES_PASSWORD` to something different than `changethis`:
+设置 `POSTGRES_PASSWORD`，替换默认值：
 
 ```bash
-export POSTGRES_PASSWORD="changethis"
+export POSTGRES_PASSWORD="your_secure_password"
 ```
 
-Set the `SECRET_KEY`, used to sign tokens:
+设置 `SECRET_KEY`，用于签名 JWT token：
 
 ```bash
-export SECRET_KEY="changethis"
+export SECRET_KEY="your_generated_secret_key"
 ```
 
-Note: you can use the Python command above to generate a secure secret key.
+提示：使用上述 Python 命令生成安全密钥。
 
-Set the `FIRST_SUPER_USER_PASSWORD` to something different than `changethis`:
+设置 `FIRST_SUPERUSER_PASSWORD`，初始超级用户密码：
 
 ```bash
-export FIRST_SUPERUSER_PASSWORD="changethis"
+export FIRST_SUPERUSER_PASSWORD="your_secure_password"
 ```
 
-Set the `BACKEND_CORS_ORIGINS` to include your domain:
+设置 `BACKEND_CORS_ORIGINS`，包含你的域名：
 
 ```bash
 export BACKEND_CORS_ORIGINS="https://dashboard.${DOMAIN?Variable not set},https://api.${DOMAIN?Variable not set}"
 ```
 
-You can set several other environment variables:
+#### 其他可选环境变量
 
-* `PROJECT_NAME`: The name of the project, used in the API for the docs and emails.
-* `STACK_NAME`: The name of the stack used for Docker Compose labels and project name, this should be different for `staging`, `production`, etc. You could use the same domain replacing dots with dashes, e.g. `fastapi-project-example-com` and `staging-fastapi-project-example-com`.
-* `BACKEND_CORS_ORIGINS`: A list of allowed CORS origins separated by commas.
-* `FIRST_SUPERUSER`: The email of the first superuser, this superuser will be the one that can create new users.
-* `SMTP_HOST`: The SMTP server host to send emails, this would come from your email provider (E.g. Mailgun, Sparkpost, Sendgrid, etc).
-* `SMTP_USER`: The SMTP server user to send emails.
-* `SMTP_PASSWORD`: The SMTP server password to send emails.
-* `EMAILS_FROM_EMAIL`: The email account to send emails from.
-* `POSTGRES_SERVER`: The hostname of the PostgreSQL server. You can leave the default of `db`, provided by the same Docker Compose. You normally wouldn't need to change this unless you are using a third-party provider.
-* `POSTGRES_PORT`: The port of the PostgreSQL server. You can leave the default. You normally wouldn't need to change this unless you are using a third-party provider.
-* `POSTGRES_USER`: The Postgres user, you can leave the default.
-* `POSTGRES_DB`: The database name to use for this application. You can leave the default of `app`.
-* `SENTRY_DSN`: The DSN for Sentry, if you are using it.
+- PROJECT_NAME: 项目名称，用于 API 文档和邮件
+- STACK_NAME: Docker Compose 标签和项目名使用的栈名称，不同环境应使用不同名称
+  - 例如：crust-cyou 和 staging-crust-cyou（将域名中的点替换为横杠）
+- BACKEND_CORS_ORIGINS: 允许的 CORS 源列表，用逗号分隔
+- FIRST_SUPERUSER: 第一个超级用户的邮箱地址，该用户可以创建新用户
+- SMTP_HOST: SMTP 服务器主机（如 Mailgun、Sparkpost、Sendgrid 等）
+- SMTP_USER: SMTP 服务器用户名
+- SMTP_PASSWORD: SMTP 服务器密码
+- EMAILS_FROM_EMAIL: 发送邮件的邮箱地址
+- POSTGRES_SERVER: PostgreSQL 服务器主机名，默认为 `db`（Docker Compose 提供）
+- POSTGRES_PORT: PostgreSQL 服务器端口，使用默认值即可
+- POSTGRES_USER: PostgreSQL 用户名，使用默认值即可
+- POSTGRES_DB: 数据库名称，默认为 `app`
+- SENTRY_DSN: Sentry DSN（如果使用 Sentry 错误追踪）
 
-## GitHub Actions Environment Variables
+### GitHub Actions 环境变量
 
-There are some environment variables only used by GitHub Actions that you can configure:
+以下环境变量仅由 GitHub Actions 使用：
 
-* `LATEST_CHANGES`: Used by the GitHub Action [latest-changes](https://github.com/tiangolo/latest-changes) to automatically add release notes based on the PRs merged. It's a personal access token, read the docs for details.
-* `SMOKESHOW_AUTH_KEY`: Used to handle and publish the code coverage using [Smokeshow](https://github.com/samuelcolvin/smokeshow), follow their instructions to create a (free) Smokeshow key.
+- LATEST_CHANGES: 个人访问令牌，用于 GitHub Action [latest-changes](https://github.com/tiangolo/latest-changes) 自动生成发布说明
+- SMOKESHOW_AUTH_KEY: 用于处理和发布代码覆盖率报告，参考 [Smokeshow](https://github.com/samuelcolvin/smokeshow) 创建免费密钥
 
-### Deploy with Docker Compose
+### 使用 Docker Compose 部署
 
-With the environment variables in place, you can deploy with Docker Compose:
+环境变量设置完成后，执行以下命令部署：
 
 ```bash
 cd /root/code/app/
@@ -206,139 +207,139 @@ docker compose -f compose.yml build
 docker compose -f compose.yml up -d
 ```
 
-For production you wouldn't want to have the overrides in `compose.override.yml`, that's why we explicitly specify `compose.yml` as the file to use.
+注意：生产环境不应使用 `compose.override.yml` 中的覆盖配置，因此我们明确指定使用 `compose.yml`。
 
-## Continuous Deployment (CD)
+## 持续部署（CD）
 
-You can use GitHub Actions to deploy your project automatically. 😎
+你可以使用 GitHub Actions 实现自动化部署。
 
-You can have multiple environment deployments.
+项目已配置两个环境：`staging` 和 `production`。
 
-There are already two environments configured, `staging` and `production`. 🚀
+### 安装 GitHub Actions Runner
 
-### Install GitHub Actions Runner
-
-* On your remote server, create a user for your GitHub Actions:
+- 在远程服务器上创建 GitHub Actions 用户：
 
 ```bash
 sudo adduser github
 ```
 
-* Add Docker permissions to the `github` user:
+- 为 `github` 用户添加 Docker 权限：
 
 ```bash
 sudo usermod -aG docker github
 ```
 
-* Temporarily switch to the `github` user:
+- 切换到 `github` 用户：
 
 ```bash
 sudo su - github
 ```
 
-* Go to the `github` user's home directory:
+- 进入 `github` 用户的主目录：
 
 ```bash
 cd
 ```
 
-* [Install a GitHub Action self-hosted runner following the official guide](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners/adding-self-hosted-runners#adding-a-self-hosted-runner-to-a-repository).
+- 按照[官方指南安装 GitHub Actions self-hosted runner](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners/adding-self-hosted-runners#adding-a-self-hosted-runner-to-a-repository)
 
-* When asked about labels, add a label for the environment, e.g. `production`. You can also add labels later.
+- 当询问标签时，添加环境标签，如 `production`（也可稍后添加）
 
-After installing, the guide would tell you to run a command to start the runner. Nevertheless, it would stop once you terminate that process or if your local connection to your server is lost.
+安装完成后，指南会告诉你运行命令启动 runner。但该进程会在终端关闭或连接断开时停止。
 
-To make sure it runs on startup and continues running, you can install it as a service. To do that, exit the `github` user and go back to the `root` user:
+为确保开机自启并持续运行，需要将其安装为服务。退出 `github` 用户，返回 `root` 用户：
 
 ```bash
 exit
 ```
 
-After you do it, you will be on the previous user again. And you will be on the previous directory, belonging to that user.
+此时你将回到之前的用户和目录。
 
-Before being able to go the `github` user directory, you need to become the `root` user (you might already be):
+切换回 `root` 用户（如果还不是）：
 
 ```bash
 sudo su
 ```
 
-* As the `root` user, go to the `actions-runner` directory inside of the `github` user's home directory:
+- 以 `root` 身份进入 `github` 用户的 actions-runner 目录：
 
 ```bash
 cd /home/github/actions-runner
 ```
 
-* Install the self-hosted runner as a service with the user `github`:
+- 以 `github` 用户身份安装 self-hosted runner 服务：
 
 ```bash
 ./svc.sh install github
 ```
 
-* Start the service:
+- 启动服务：
 
 ```bash
 ./svc.sh start
 ```
 
-* Check the status of the service:
+- 检查服务状态：
 
 ```bash
 ./svc.sh status
 ```
 
-You can read more about it in the official guide: [Configuring the self-hosted runner application as a service](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners/configuring-the-self-hosted-runner-application-as-a-service).
+更多信息请参考官方指南：[Configuring the self-hosted runner application as a service](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners/configuring-the-self-hosted-runner-application-as-a-service)。
 
-### Set Secrets
+### 设置仓库密钥
 
-On your repository, configure secrets for the environment variables you need, the same ones described above, including `SECRET_KEY`, etc. Follow the [official GitHub guide for setting repository secrets](https://docs.github.com/en/actions/security-guides/using-secrets-in-github-actions#creating-secrets-for-a-repository).
+在你的 GitHub 仓库中配置密钥（secrets），包括上述所有环境变量（如 SECRET_KEY 等）。
 
-The current Github Actions workflows expect these secrets:
+参考[官方 GitHub 指南设置仓库密钥](https://docs.github.com/en/actions/security-guides/using-secrets-in-github-actions#creating-secrets-for-a-repository)。
 
-* `DOMAIN_PRODUCTION`
-* `DOMAIN_STAGING`
-* `STACK_NAME_PRODUCTION`
-* `STACK_NAME_STAGING`
-* `EMAILS_FROM_EMAIL`
-* `FIRST_SUPERUSER`
-* `FIRST_SUPERUSER_PASSWORD`
-* `POSTGRES_PASSWORD`
-* `SECRET_KEY`
-* `LATEST_CHANGES`
-* `SMOKESHOW_AUTH_KEY`
+当前 GitHub Actions 工作流需要以下密钥：
 
-## GitHub Action Deployment Workflows
+- DOMAIN_PRODUCTION
+- DOMAIN_STAGING
+- STACK_NAME_PRODUCTION
+- STACK_NAME_STAGING
+- EMAILS_FROM_EMAIL
+- FIRST_SUPERUSER
+- FIRST_SUPERUSER_PASSWORD
+- POSTGRES_PASSWORD
+- SECRET_KEY
+- LATEST_CHANGES
+- SMOKESHOW_AUTH_KEY
 
-There are GitHub Action workflows in the `.github/workflows` directory already configured for deploying to the environments (GitHub Actions runners with the labels):
+## GitHub Actions 部署工作流
 
-* `staging`: after pushing (or merging) to the branch `master`.
-* `production`: after publishing a release.
+`.github/workflows` 目录中已配置好部署工作流，对应不同环境（GitHub Actions runner 标签）：
 
-If you need to add extra environments you could use those as a starting point.
+- staging: 推送（或合并）到 `master` 分支后自动部署
+- production: 发布 release 后自动部署
 
-## URLs
+如需添加其他环境，可以以上述配置为基础进行修改。
 
-Replace `fastapi-project.example.com` with your domain.
+## 服务地址
 
-### Main Traefik Dashboard
+将示例中的 `crust.cyou` 替换为你的实际域名。
 
-Traefik UI: `https://traefik.fastapi-project.example.com`
+### Traefik 主控制面板
 
-### Production
+Traefik UI: https://traefik.crust.cyou
 
-Frontend: `https://dashboard.fastapi-project.example.com`
+### 生产环境
 
-Backend API docs: `https://api.fastapi-project.example.com/docs`
+前端: https://dashboard.crust.cyou
 
-Backend API base URL: `https://api.fastapi-project.example.com`
+后端 API 文档: https://api.crust.cyou/docs
 
-Adminer: `https://adminer.fastapi-project.example.com`
+后端 API 基础 URL: https://api.crust.cyou
 
-### Staging
+Adminer 数据库管理: https://adminer.crust.cyou
 
-Frontend: `https://dashboard.staging.fastapi-project.example.com`
+### Staging 环境
 
-Backend API docs: `https://api.staging.fastapi-project.example.com/docs`
+前端: https://dashboard.staging.crust.cyou
 
-Backend API base URL: `https://api.staging.fastapi-project.example.com`
+后端 API 文档: https://api.staging.crust.cyou/docs
 
-Adminer: `https://adminer.staging.fastapi-project.example.com`
+后端 API 基础 URL: https://api.staging.crust.cyou
+
+Adminer 数据库管理: https://adminer.staging.crust.cyou
