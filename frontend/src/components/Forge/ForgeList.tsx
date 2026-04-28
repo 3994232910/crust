@@ -48,7 +48,7 @@ import {
   useRef,
   useState,
 } from "react"
-import { type ForgePublic, ForgeService, type ForgesPublic } from "@/client"
+import { type ForgePublic, ForgeService, type ForgesPublic, OpenAPI } from "@/client"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -593,6 +593,69 @@ export function ForgeList() {
   const handleExport = async (format: string) => {
     if (!selectedForge || selectedForge.is_folder) return
     const token = localStorage.getItem("access_token")
+    const content = editContent || selectedForge.content || ""
+
+    // 检测是否含有 3D 模型标签，若有则走 zip 导出流程
+    const modelSrcs = [
+      ...[...content.matchAll(/<model\s+src="([^"]+)"/g)].map((m) => m[1]),
+      ...[...content.matchAll(/class="model-container"[^>]*data-src="([^"]+)"/g)].map((m) => m[1]),
+    ]
+    if (format === "md" && modelSrcs.length > 0) {
+      // 解析 3D Renderer 实际存储截图时用的 key：
+      // resolveModelPath 在跨域时会把 /models/... 变成 http://host/models/...
+      // 所以要同时尝试短路径 key 和完整 URL key
+      function resolveForThumbnailKey(src: string): string {
+        if (!src.startsWith("/") || !OpenAPI.BASE) return src
+        try {
+          const base = new URL(OpenAPI.BASE, window.location.origin)
+          if (base.origin !== window.location.origin) return `${base.origin}${src}`
+        } catch {}
+        return src
+      }
+
+      const thumbnails: Record<string, string> = {}
+      for (const src of modelSrcs) {
+        const resolvedSrc = resolveForThumbnailKey(src)
+        const saved =
+          localStorage.getItem(getModelThumbnailKey(resolvedSrc)) ??
+          localStorage.getItem(getModelThumbnailKey(src))
+        if (saved) thumbnails[src] = saved
+      }
+      const missingSrcs = modelSrcs.filter((src) => !thumbnails[src])
+      if (missingSrcs.length > 0) {
+        toast.showErrorToast(
+          `请先在预览模式中打开笔记，等待 3D 模型加载完成后再导出（${missingSrcs.length} 个模型尚无截图）`
+        )
+        return
+      }
+      try {
+        const headers: Record<string, string> = { "Content-Type": "application/json" }
+        if (token) headers["Authorization"] = `Bearer ${token}`
+        const res = await fetch(`/api/v1/forge/${selectedForge.id}/export-zip`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ thumbnails }),
+        })
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}))
+          throw new Error(err?.detail ?? `导出失败 (${res.status})`)
+        }
+        const blob = await res.blob()
+        const disposition = res.headers.get("Content-Disposition") ?? ""
+        const match = disposition.match(/filename\*?=(?:UTF-8'')?["']?([^"';\n]+)/i)
+        const filename = match ? decodeURIComponent(match[1]) : `${selectedForge.title || "untitled"}.zip`
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement("a")
+        a.href = url
+        a.download = filename
+        a.click()
+        URL.revokeObjectURL(url)
+      } catch (err) {
+        toast.showErrorToast(err instanceof Error ? err.message : "导出失败")
+      }
+      return
+    }
+
     try {
       const res = await fetch(`/api/v1/forge/${selectedForge.id}/export?format=${format}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -626,8 +689,17 @@ export function ForgeList() {
     const modelMatches = [...content.matchAll(/<model\s+src="([^"]+)"/g)]
     let thumbnail: string | undefined
     for (const m of modelMatches) {
-      const key = getModelThumbnailKey(m[1])
-      const saved = localStorage.getItem(key)
+      const src = m[1]
+      let resolved = src
+      if (src.startsWith("/") && OpenAPI.BASE) {
+        try {
+          const base = new URL(OpenAPI.BASE, window.location.origin)
+          if (base.origin !== window.location.origin) resolved = `${base.origin}${src}`
+        } catch {}
+      }
+      const saved =
+        localStorage.getItem(getModelThumbnailKey(resolved)) ??
+        localStorage.getItem(getModelThumbnailKey(src))
       if (saved) { thumbnail = saved; break }
     }
 

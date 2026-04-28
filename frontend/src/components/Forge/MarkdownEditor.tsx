@@ -12,6 +12,23 @@ import { Button } from '@/components/ui/button'
 import { Model3DViewerFrame } from './Model3DViewerFrame'
 import { ModelUploadDialog } from './ModelUploadDialog'
 
+async function uploadImageFile(file: File): Promise<string> {
+  const token = localStorage.getItem('access_token')
+  const formData = new FormData()
+  formData.append('file', file)
+  const res = await fetch('/api/v1/forge/upload-image', {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err?.detail ?? '图片上传失败')
+  }
+  const data = await res.json()
+  return data.url as string
+}
+
 interface WikiForge {
   id: string
   title: string | null
@@ -150,6 +167,64 @@ export function MarkdownEditor({
     }
   }, [suggestions, selectedSuggestion, insertSuggestion])
 
+  const [isUploadingImage, setIsUploadingImage] = useState(false)
+
+  const insertTextAtCursor = useCallback((text: string) => {
+    const textarea = editorRef.current
+    if (!textarea) return
+    const start = textarea.selectionStart
+    const end = textarea.selectionEnd
+    const newContent = content.substring(0, start) + text + content.substring(end)
+    onChange(newContent)
+    setTimeout(() => {
+      textarea.focus()
+      const pos = start + text.length
+      textarea.setSelectionRange(pos, pos)
+    }, 50)
+  }, [content, onChange])
+
+  // 用 ref 持有最新 content，供异步上传回调替换占位符时使用
+  const contentRef = useRef(content)
+  contentRef.current = content
+
+  const handleImageFiles = useCallback(async (files: File[]) => {
+    const imageFiles = files.filter(f => f.type.startsWith('image/'))
+    if (imageFiles.length === 0) return
+    setIsUploadingImage(true)
+    try {
+      for (const file of imageFiles) {
+        const placeholder = `![上传中…]()`
+        insertTextAtCursor(placeholder)
+        try {
+          const url = await uploadImageFile(file)
+          const altText = file.name.replace(/\.[^.]+$/, '')
+          onChange(contentRef.current.replace(placeholder, `![${altText}](${url})`))
+        } catch (e) {
+          onChange(contentRef.current.replace(placeholder, ''))
+          console.error('图片上传失败:', e)
+        }
+      }
+    } finally {
+      setIsUploadingImage(false)
+    }
+  }, [insertTextAtCursor, onChange])
+
+  const handlePaste = useCallback(async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = Array.from(e.clipboardData.items)
+    const imageItems = items.filter(item => item.type.startsWith('image/'))
+    if (imageItems.length === 0) return
+    e.preventDefault()
+    const files = imageItems.map(item => item.getAsFile()).filter(Boolean) as File[]
+    await handleImageFiles(files)
+  }, [handleImageFiles])
+
+  const handleDrop = useCallback(async (e: React.DragEvent<HTMLTextAreaElement>) => {
+    const files = Array.from(e.dataTransfer.files)
+    if (!files.some(f => f.type.startsWith('image/'))) return
+    e.preventDefault()
+    await handleImageFiles(files)
+  }, [handleImageFiles])
+
   const processedContent = preprocessWikilinks(content, forges)
 
   // 用 ref 持有最新回调，避免 useMemo 依赖频繁变化
@@ -264,6 +339,9 @@ export function MarkdownEditor({
                 value={content}
                 onChange={handleContentChange}
                 onKeyDown={handleEditorKeyDown}
+                onPaste={handlePaste}
+                onDrop={handleDrop}
+                onDragOver={(e) => e.preventDefault()}
                 placeholder={`# Start writing...
 
 ## 双向链接
@@ -277,8 +355,9 @@ export function MarkdownEditor({
 &lt;/div&gt;
 
 快捷键: Ctrl+M 打开模型面板`}
-                className="w-full h-full min-h-full p-4 font-mono text-sm bg-background resize-none focus:outline-none overflow-y-auto"
+                className={`w-full h-full min-h-full p-4 font-mono text-sm bg-background resize-none focus:outline-none overflow-y-auto ${isUploadingImage ? 'opacity-70' : ''}`}
                 spellCheck={false}
+                disabled={isUploadingImage}
               />
 
               {/* [[ autocomplete dropdown */}
@@ -301,6 +380,11 @@ export function MarkdownEditor({
                 </div>
               )}
 
+              {isUploadingImage && (
+                <div className="absolute bottom-16 right-4 text-xs text-muted-foreground bg-background/80 px-2 py-1 rounded border">
+                  图片上传中…
+                </div>
+              )}
               <Button
                 variant="secondary"
                 size="sm"

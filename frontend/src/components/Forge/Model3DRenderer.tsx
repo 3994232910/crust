@@ -141,7 +141,7 @@ function ModelContent({ path, onClick, onLoaded, onSceneReady }: {
 }
 
 function ScreenshotCapture({ onCapture, captureTrigger }: { onCapture: (screenshot: string) => void, captureTrigger: number }) {
-  const { gl, invalidate } = useThree()
+  const { invalidate } = useThree()
   const pendingCapture = useRef(false)
   const onCaptureRef = useRef(onCapture)
   onCaptureRef.current = onCapture
@@ -153,15 +153,13 @@ function ScreenshotCapture({ onCapture, captureTrigger }: { onCapture: (screensh
     }
   }, [captureTrigger, invalidate])
 
-  useFrame(() => {
-    if (pendingCapture.current) {
-      pendingCapture.current = false
-      // rAF 确保在当前帧 flush 到屏幕后再读取，避免读到空帧
-      requestAnimationFrame(() => {
-        const dataURL = gl.domElement.toDataURL('image/jpeg', 0.8)
-        onCaptureRef.current(dataURL)
-      })
-    }
+  // 在 useFrame 内手动 render 再立即读取，确保 canvas 有内容
+  useFrame(({ gl, scene, camera }) => {
+    if (!pendingCapture.current) return
+    pendingCapture.current = false
+    gl.render(scene, camera)
+    const dataURL = gl.domElement.toDataURL('image/jpeg', 0.85)
+    onCaptureRef.current(dataURL)
   })
 
   return null
@@ -169,20 +167,19 @@ function ScreenshotCapture({ onCapture, captureTrigger }: { onCapture: (screensh
 
 /** Captures a frame and saves it to localStorage as the model thumbnail. */
 function ThumbnailCapture({ modelPath, trigger }: { modelPath: string; trigger: number }) {
-  const { gl, invalidate } = useThree()
+  const { invalidate } = useThree()
   const pending = useRef(false)
 
   useEffect(() => {
     if (trigger > 0) { pending.current = true; invalidate() }
   }, [trigger, invalidate])
 
-  useFrame(() => {
+  useFrame(({ gl, scene, camera }) => {
     if (!pending.current) return
     pending.current = false
-    requestAnimationFrame(() => {
-      const dataURL = gl.domElement.toDataURL('image/jpeg', 0.75)
-      saveThumbnailToStorage(modelPath, dataURL)
-    })
+    gl.render(scene, camera)
+    const dataURL = gl.domElement.toDataURL('image/jpeg', 0.85)
+    saveThumbnailToStorage(modelPath, dataURL)
   })
   return null
 }
@@ -597,7 +594,7 @@ export function Model3DRenderer({ modelPath, onModelClick, initialView }: Model3
         <Canvas
           camera={{ position: savedView?.position ?? initialView?.position ?? [0, 0, 5] }}
           frameloop="demand"
-          gl={{ powerPreference: 'default', antialias: true }}
+          gl={{ powerPreference: 'default', antialias: true, preserveDrawingBuffer: true }}
           onCreated={({ gl }) => {
             // 在 webglcontextlost 事件层面截断死循环：
             // 若不处理，Three.js 抛错 → R3F remount → 新 Canvas → 立刻再次 lost → 无限循环

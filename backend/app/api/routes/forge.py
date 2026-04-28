@@ -16,6 +16,7 @@ from app import crud
 from app.models.forge import (
     AnnotateRequest,
     CompleteRequest,
+    ExportZipRequest,
     Forge,
     ForgeCreate,
     ForgePublic,
@@ -544,7 +545,40 @@ async def get_knowledge_map(
     }
 
 
-# 5. 模型路由（必须放在 /{id} 之前！）
+# 5. 图片上传路由（必须放在 /{id} 之前！）
+UPLOAD_IMAGE_ALLOWED = {"jpg", "jpeg", "png", "gif", "webp", "svg"}
+
+@router.post("/upload-image", response_model=dict)
+async def upload_image(
+    *,
+    current_user: CurrentUser,
+    file: UploadFile = File(...),
+) -> Any:
+    """上传笔记内嵌图片，返回可直接用于 Markdown 的 URL。"""
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="文件名不能为空")
+
+    ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
+    if ext not in UPLOAD_IMAGE_ALLOWED:
+        raise HTTPException(
+            status_code=400,
+            detail=f"不支持的图片格式: .{ext}，支持: {', '.join(sorted(UPLOAD_IMAGE_ALLOWED))}",
+        )
+
+    contents = await file.read()
+    if len(contents) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="图片过大，最大支持 20MB")
+
+    user_dir = Path("forge-images") / str(current_user.id)
+    user_dir.mkdir(parents=True, exist_ok=True)
+
+    filename = f"{uuid.uuid4()}.{ext}"
+    (user_dir / filename).write_bytes(contents)
+
+    return {"url": f"/forge-images/{current_user.id}/{filename}"}
+
+
+# 5b. 模型路由（必须放在 /{id} 之前！）
 @router.post("/upload-model", response_model=dict)
 async def upload_model(
     *,
@@ -765,6 +799,169 @@ th,td{{border:1px solid #ccc;padding:.4em .8em}}
         )
 
     raise HTTPException(status_code=400, detail="未知格式")  # unreachable
+
+
+@router.post("/{id}/export-zip")
+async def export_forge_zip(
+    session: SessionDep,
+    id: uuid.UUID,
+    current_user: CurrentUser,
+    body: ExportZipRequest,
+) -> StreamingResponse:
+    """将含有 3D 模型的笔记导出为 zip 文件夹：模型位置替换为缩略图，并附带原始模型文件。"""
+    import io
+    import re
+    import zipfile
+    import base64
+
+    forge = crud.get_forge(session=session, forge_id=id)
+    if not forge:
+        raise HTTPException(status_code=404, detail="Forge not found")
+    if forge.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+    if forge.is_folder:
+        raise HTTPException(status_code=400, detail="文件夹无法导出")
+
+    title = forge.title or "untitled"
+    content = forge.content or ""
+    safe_title = "".join(c for c in title if c.isalnum() or c in " _-（）()[]【】").strip() or "untitled"
+
+    # 模型 src → zip 内截图路径的映射
+    model_image_map: dict[str, str] = {}  # src -> images/caption.jpg
+
+    def _make_safe_img_name(caption: str, idx: int) -> str:
+        """用 caption 作为图片文件名，无 caption 则回退到 model_{idx}。"""
+        if caption:
+            safe = re.sub(r'[\\/*?:"<>|\r\n\t]', "_", caption)[:50].strip("_. ")
+            if safe:
+                return safe
+        return f"model_{idx}"
+
+    def _register_model(src: str, caption: str) -> str:
+        """返回该模型在 zip 内对应的截图路径，文件名与 caption 一致。"""
+        if src not in model_image_map:
+            idx = len(model_image_map)
+            base_name = _make_safe_img_name(caption, idx)
+            img_path = f"images/{base_name}.jpg"
+            # 去重
+            used = set(model_image_map.values())
+            if img_path in used:
+                img_path = f"images/{base_name}_{idx}.jpg"
+            model_image_map[src] = img_path
+        return model_image_map[src]
+
+    thumbnails = body.thumbnails  # src -> base64 data URL
+
+    # 替换 <model src="..." ...>caption</model>
+    def replace_model_tag(m: re.Match) -> str:
+        src = m.group(1)
+        caption = re.sub(r"<[^>]+>", "", m.group(2)).strip()
+        display = caption or "3D模型"
+        if src in thumbnails:
+            img_path = _register_model(src, caption)
+            return f"![{display}]({img_path})" + (f"\n\n*{caption}*" if caption else "")
+        # 没有截图：输出纯文字占位，不生成破损图片引用
+        filename = src.split("/")[-1]
+        return f"> **[3D模型]** {display}（`{filename}`）"
+
+    content = re.sub(
+        r'<model\s+src="([^"]+)"[^>]*>([\s\S]*?)</model>',
+        replace_model_tag,
+        content,
+    )
+
+    # 替换 <div class="model-container" data-src="..." ...>caption</div>
+    def replace_div_tag(m: re.Match) -> str:
+        src = m.group(1)
+        caption = re.sub(r"<[^>]+>", "", m.group(2)).strip()
+        display = caption or "3D模型"
+        if src in thumbnails:
+            img_path = _register_model(src, caption)
+            return f"![{display}]({img_path})" + (f"\n\n*{caption}*" if caption else "")
+        filename = src.split("/")[-1]
+        return f"> **[3D模型]** {display}（`{filename}`）"
+
+    content = re.sub(
+        r'<div\s[^>]*class="model-container"[^>]*data-src="([^"]+)"[^>]*>([\s\S]*?)</div>',
+        replace_div_tag,
+        content,
+    )
+
+    # 收集 md 里的普通图片 ![alt](/server/path) → 替换为相对路径并打包
+    regular_image_map: dict[str, str] = {}  # original_url -> zip 内相对路径
+
+    def replace_regular_image(m: re.Match) -> str:
+        alt = m.group(1)
+        url = m.group(2)
+        # 只处理服务端绝对路径（/开头但不是 //）
+        if url.startswith("/") and not url.startswith("//"):
+            if url not in regular_image_map:
+                img_filename = url.split("/")[-1] or "image.jpg"
+                zip_img_path = f"images/{img_filename}"
+                # 去重
+                used = set(regular_image_map.values())
+                counter = 1
+                base_zip_path = zip_img_path
+                while zip_img_path in used:
+                    stem, _, ext = base_zip_path.rpartition(".")
+                    zip_img_path = f"{stem}_{counter}.{ext}" if ext else f"{base_zip_path}_{counter}"
+                    counter += 1
+                regular_image_map[url] = zip_img_path
+            return f"![{alt}]({regular_image_map[url]})"
+        return m.group(0)
+
+    content = re.sub(r'!\[([^\]]*)\]\(([^)"\s]+)\)', replace_regular_image, content)
+
+    # 构建 zip
+    models_dir = Path("models") / str(current_user.id)
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        # 1. 写入 md 文件
+        zf.writestr(f"{safe_title}/{safe_title}.md", content.encode("utf-8"))
+
+        # 2. 写入模型截图（由前端传来的 base64 thumbnails）
+        for src, img_zip_path in model_image_map.items():
+            data_url = body.thumbnails.get(src, "")
+            if data_url and "," in data_url:
+                img_bytes = base64.b64decode(data_url.split(",", 1)[1])
+                zf.writestr(f"{safe_title}/{img_zip_path}", img_bytes)
+
+        # 3. 写入 3D 模型源文件（/models/{user_id}/filename）
+        added_model_files: set[str] = set()
+        for src in model_image_map:
+            if not src.startswith("/models/"):
+                continue
+            # src = /models/{uid}/{filename}，去掉开头的 /
+            rel = src.lstrip("/")
+            file_path = Path(rel)
+            if not file_path.exists() or not file_path.is_file():
+                continue
+            arc_name = f"{safe_title}/models/{file_path.name}"
+            if arc_name not in added_model_files:
+                zf.write(file_path, arc_name)
+                added_model_files.add(arc_name)
+            # gltf 需要附带同目录的 .bin 和贴图文件
+            if file_path.suffix.lower() == ".gltf":
+                for ext_glob in ("*.bin", "*.png", "*.jpg", "*.jpeg", "*.webp"):
+                    for sibling in file_path.parent.glob(ext_glob):
+                        sib_arc = f"{safe_title}/models/{sibling.name}"
+                        if sib_arc not in added_model_files:
+                            zf.write(sibling, sib_arc)
+                            added_model_files.add(sib_arc)
+
+        # 4. 写入 md 里的普通服务端图片
+        for img_url, img_zip_path in regular_image_map.items():
+            file_path = Path(img_url.lstrip("/"))
+            if file_path.exists() and file_path.is_file():
+                zf.write(file_path, f"{safe_title}/{img_zip_path}")
+
+    buf.seek(0)
+    filename = f"{safe_title}.zip"
+    return StreamingResponse(
+        buf,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename*=UTF-8\'\'{_quote(filename)}'},
+    )
 
 
 def _quote(s: str) -> str:
