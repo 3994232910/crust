@@ -75,7 +75,7 @@ function Login() {
           className="flex flex-col gap-6"
         >
           <div className="flex flex-col items-center gap-2 text-center">
-            <h1 className="text-2xl font-bold">Login to your account</h1>
+            <h1 className="text-2xl font-bold text-blue-400">Login to your account</h1>
           </div>
 
           <div className="grid gap-4">
@@ -84,7 +84,7 @@ function Login() {
               name="username"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Email</FormLabel>
+                  <FormLabel className="text-blue-400">Email</FormLabel>
                   <FormControl>
                     <Input
                       data-testid="email-input"
@@ -104,7 +104,7 @@ function Login() {
               render={({ field }) => (
                 <FormItem>
                   <div className="flex items-center">
-                    <FormLabel>Password</FormLabel>
+                    <FormLabel className="text-blue-400">Password</FormLabel>
                     <RouterLink
                       to="/recover-password"
                       className="ml-auto text-sm underline-offset-4 hover:underline"
@@ -129,9 +129,9 @@ function Login() {
             </LoadingButton>
           </div>
 
-          <div className="text-center text-sm">
+          <div className="text-center text-sm text-blue-400">
             Don't have an account yet?{" "}
-            <RouterLink to="/signup" className="underline underline-offset-4">
+            <RouterLink to="/signup" className="text-blue-400 underline underline-offset-4">
               Sign up
             </RouterLink>
           </div>
