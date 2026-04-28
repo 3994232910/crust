@@ -52,6 +52,11 @@ thumbnails_dir = Path("thumbnails")
 thumbnails_dir.mkdir(exist_ok=True)
 app.mount("/thumbnails", StaticFiles(directory=thumbnails_dir), name="thumbnails")
 
+# Mount static files for forge note images
+forge_images_dir = Path("forge-images")
+forge_images_dir.mkdir(exist_ok=True)
+app.mount("/forge-images", StaticFiles(directory=forge_images_dir), name="forge-images")
+
 # Set all CORS enabled origins
 if settings.all_cors_origins:
     app.add_middleware(
@@ -63,7 +68,7 @@ if settings.all_cors_origins:
     )
 
 _PING_INTERVAL = timedelta(minutes=5)
-_SKIP_PING_PREFIXES = ("/avatars", "/models", "/thumbnails", f"{settings.API_V1_STR}/openapi")
+_SKIP_PING_PREFIXES = ("/avatars", "/models", "/thumbnails", "/forge-images", f"{settings.API_V1_STR}/openapi")
 
 
 @app.middleware("http")

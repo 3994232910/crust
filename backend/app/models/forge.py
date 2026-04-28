@@ -123,3 +123,8 @@ class ImageTo3DRequest(SQLModel):
     octree_resolution: int = 256
     num_inference_steps: int = 5
     guidance_scale: float = 5.0
+
+
+class ExportZipRequest(SQLModel):
+    # key: model src URL, value: base64 data URL (e.g. "data:image/jpeg;base64,...")
+    thumbnails: dict[str, str] = {}
