@@ -268,8 +268,64 @@ interface DetailDialogProps {
   following: boolean
 }
 
+function readStargazingGroups(): { groups: { id: string; name: string; color: string }[]; assignments: Record<string, string> } {
+  try {
+    return JSON.parse(localStorage.getItem('stargazing_groups') ?? '{"groups":[],"assignments":{}}')
+  } catch {
+    return { groups: [], assignments: {} }
+  }
+}
+
+function saveGroupAssignment(userId: string, groupId: string | null) {
+  const state = readStargazingGroups()
+  if (groupId === null) delete state.assignments[userId]
+  else state.assignments[userId] = groupId
+  localStorage.setItem('stargazing_groups', JSON.stringify(state))
+}
+
 function DetailDialog({ post, onClose, onDelete, onFollowToggle, canDelete, deleting, following }: DetailDialogProps) {
   const { user: currentUser } = useAuth()
+  const [showGroupPicker, setShowGroupPicker] = useState(false)
+  const [pickerGroups, setPickerGroups] = useState<{ id: string; name: string; color: string }[]>([])
+  const [newGroupInput, setNewGroupInput] = useState('')
+
+  const openPicker = () => {
+    setPickerGroups(readStargazingGroups().groups)
+    setNewGroupInput('')
+    setShowGroupPicker(true)
+  }
+
+  const createAndPick = () => {
+    const name = newGroupInput.trim()
+    if (!name) return
+    const GROUP_COLORS = ['#60a5fa', '#a78bfa', '#34d399', '#f472b6', '#facc15']
+    const state = readStargazingGroups()
+    const newGroup = {
+      id: crypto.randomUUID(),
+      name,
+      color: GROUP_COLORS[state.groups.length % GROUP_COLORS.length],
+    }
+    state.groups.push(newGroup)
+    localStorage.setItem('stargazing_groups', JSON.stringify(state))
+    handlePickGroup(newGroup.id)
+  }
+
+  const handleFollowClick = () => {
+    if (!post) return
+    if (post.is_following) {
+      onFollowToggle(post)
+    } else {
+      openPicker()
+    }
+  }
+
+  const handlePickGroup = async (groupId: string | null) => {
+    if (!post) return
+    setShowGroupPicker(false)
+    await onFollowToggle(post)
+    saveGroupAssignment(post.owner_id, groupId)
+  }
+
   // Only show a header image if it's a real image from content (not a model screenshot thumbnail)
   const hasModel = !!extractFirstModelSrc(post?.content ?? null)
   const imageUrl = hasModel
@@ -309,19 +365,70 @@ function DetailDialog({ post, onClose, onDelete, onFollowToggle, canDelete, dele
                 {post ? formatRelativeTime(post.created_at) : ''}
               </span>
               {post && currentUser?.id !== post.owner_id && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className={`h-7 gap-1 ${
-                    post.is_following
-                      ? 'text-primary hover:text-destructive hover:bg-destructive/10'
-                      : 'text-muted-foreground hover:text-primary'
-                  }`}
-                  disabled={following}
-                  onClick={() => onFollowToggle(post)}
-                >
-                  {following ? '…' : post.is_following ? 'Following' : 'Follow'}
-                </Button>
+                <div className="relative">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className={`h-7 gap-1 ${
+                      post.is_following
+                        ? 'text-primary hover:text-destructive hover:bg-destructive/10'
+                        : 'text-muted-foreground hover:text-primary'
+                    }`}
+                    disabled={following}
+                    onClick={handleFollowClick}
+                  >
+                    {following ? '…' : post.is_following ? 'Following' : 'Follow'}
+                  </Button>
+
+                  {showGroupPicker && (
+                    <div
+                      className="absolute top-full left-0 mt-1 z-50 rounded-lg border shadow-lg py-1 min-w-[160px]"
+                      style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
+                    >
+                      <button
+                        className="w-full text-left px-3 py-1.5 text-sm hover:bg-accent/30"
+                        onClick={() => handlePickGroup(null)}
+                      >
+                        不分组
+                      </button>
+                      {pickerGroups.map((g) => (
+                        <button
+                          key={g.id}
+                          className="w-full text-left px-3 py-1.5 text-sm flex items-center gap-2 hover:bg-accent/30"
+                          onClick={() => handlePickGroup(g.id)}
+                        >
+                          <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: g.color }} />
+                          {g.name}
+                        </button>
+                      ))}
+                      <div
+                        className="flex items-center border-t px-2 pt-1 pb-1 gap-1"
+                        style={{ borderColor: 'var(--border)' }}
+                      >
+                        <input
+                          autoFocus
+                          value={newGroupInput}
+                          onChange={(e) => setNewGroupInput(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') createAndPick() }}
+                          placeholder="新建分组…"
+                          className="min-w-0 flex-1 text-xs bg-transparent outline-none text-foreground placeholder:text-muted-foreground"
+                        />
+                        <button
+                          className="text-xs text-primary hover:opacity-80 shrink-0"
+                          onClick={createAndPick}
+                        >
+                          确定
+                        </button>
+                      </div>
+                      <button
+                        className="w-full text-left px-3 py-1 text-xs text-muted-foreground hover:bg-accent/30"
+                        onClick={() => setShowGroupPicker(false)}
+                      >
+                        取消
+                      </button>
+                    </div>
+                  )}
+                </div>
               )}
               {post && canDelete(post) && (
                 <Button
