@@ -11,7 +11,13 @@ export default defineConfig({
     },
   },
   define: {
-    'process.env': {},
+    "process.env": {},
+  },
+  build: {
+    rollupOptions: {
+      // 限制并行文件操作数，降低构建峰值内存
+      maxParallelFileOps: 5,
+    },
   },
   plugins: [
     tanstackRouter({
@@ -21,4 +27,29 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
+  server: {
+    proxy: {
+      "/api": {
+        target: "http://127.0.0.1:8000",
+        changeOrigin: true,
+        secure: false,
+      },
+      "/models": {
+        target: "http://127.0.0.1:8000",
+        changeOrigin: true,
+      },
+      "/thumbnails": {
+        target: "http://127.0.0.1:8000",
+        changeOrigin: true,
+      },
+      "/avatars": {
+        target: "http://127.0.0.1:8000",
+        changeOrigin: true,
+      },
+      "/forge-images": {
+        target: "http://127.0.0.1:8000",
+        changeOrigin: true,
+      },
+    },
+  },
 })

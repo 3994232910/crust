@@ -1,7 +1,8 @@
-import { Briefcase, Home, Notebook, Users } from "lucide-react"
+import { Home, Notebook, Users } from "lucide-react"
 
 import { SidebarAppearance } from "@/components/Common/Appearance"
 import { Logo } from "@/components/Common/Logo"
+import { GalaxyIcon } from "@/components/Community/GalaxyIcon"
 import {
   Sidebar,
   SidebarContent,
@@ -14,8 +15,8 @@ import { User } from "./User"
 
 const baseItems: Item[] = [
   { icon: Home, title: "Dashboard", path: "/" },
-  { icon: Briefcase, title: "Items", path: "/items" },
   { icon: Notebook, title: "Forge", path: "/forge" },
+  { icon: GalaxyIcon as Item["icon"], title: "Community", path: "/community" },
 ]
 
 export function AppSidebar() {

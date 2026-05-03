@@ -3,7 +3,7 @@
 import type { CancelablePromise } from './core/CancelablePromise';
 import { OpenAPI } from './core/OpenAPI';
 import { request as __request } from './core/request';
-import type { ForgeReadForgesData, ForgeReadForgesResponse, ForgeCreateForgeData, ForgeCreateForgeResponse, ForgeReadForgeData, ForgeReadForgeResponse, ForgeUpdateForgeData, ForgeUpdateForgeResponse, ForgeDeleteForgeData, ForgeDeleteForgeResponse, ItemsReadItemsData, ItemsReadItemsResponse, ItemsCreateItemData, ItemsCreateItemResponse, ItemsReadItemData, ItemsReadItemResponse, ItemsUpdateItemData, ItemsUpdateItemResponse, ItemsDeleteItemData, ItemsDeleteItemResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, PrivateCreateUserData, PrivateCreateUserResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersUploadAvatarData, UsersUploadAvatarResponse, UsersDeleteAvatarResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse } from './types.gen';
+import type { ForgeReadForgesData, ForgeReadForgesResponse, ForgeCreateForgeData, ForgeCreateForgeResponse, ForgeReadForgeData, ForgeReadForgeResponse, ForgeUpdateForgeData, ForgeUpdateForgeResponse, ForgeDeleteForgeData, ForgeDeleteForgeResponse, ForgeGetBacklinksData, ForgeGetBacklinksResponse, ItemsReadItemsData, ItemsReadItemsResponse, ItemsCreateItemData, ItemsCreateItemResponse, ItemsReadItemData, ItemsReadItemResponse, ItemsUpdateItemData, ItemsUpdateItemResponse, ItemsDeleteItemData, ItemsDeleteItemResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, PrivateCreateUserData, PrivateCreateUserResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersUploadAvatarData, UsersUploadAvatarResponse, UsersDeleteAvatarResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse } from './types.gen';
 
 export class ForgeService {
     /**
@@ -110,6 +110,49 @@ export class ForgeService {
                 id: data.id
             },
             errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+
+    /**
+     * Get Backlinks
+     * 返回所有通过 [[title]] 引用了此笔记的笔记（反向链接）。
+     * @param data The data for the request.
+     * @param data.id
+     * @returns ForgesPublic Successful Response
+     * @throws ApiError
+     */
+    public static getBacklinks(data: ForgeGetBacklinksData): CancelablePromise<ForgeGetBacklinksResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/forge/{id}/backlinks',
+            path: {
+                id: data.id
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+
+    /**
+     * Summarize Forges
+     * 对多篇笔记进行知识梳理，返回结构化总结报告（LangGraph 工作流）。
+     * @param data The data for the request.
+     * @param data.forgeIds List of forge IDs to summarize
+     * @param data.focus Optional focus direction for the summary
+     * @returns { summary: string, count: number } Successful Response
+     * @throws ApiError
+     */
+    public static summarizeForges(data: { forgeIds: string[]; focus?: string }): CancelablePromise<{ summary: string; count: number }> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/forge/summarize',
+            body: { forge_ids: data.forgeIds, focus: data.focus ?? '' },
+            mediaType: 'application/json',
+            errors: {
+                404: 'Not Found',
                 422: 'Validation Error'
             }
         });

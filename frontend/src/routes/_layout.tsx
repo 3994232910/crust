@@ -1,4 +1,4 @@
-import { createFileRoute, Outlet, redirect } from "@tanstack/react-router"
+import { createFileRoute, Outlet, redirect, useLocation, useNavigate, useRouterState } from "@tanstack/react-router"
 
 import { Footer } from "@/components/Common/Footer"
 import AppSidebar from "@/components/Sidebar/AppSidebar"
@@ -20,20 +20,89 @@ export const Route = createFileRoute("/_layout")({
   },
 })
 
-function Layout() {
+const communityTabs = [
+  { key: "feed", label: "全部" },
+  { key: "my-posts", label: "我的帖子" },
+  { key: "my-favorites", label: "我的收藏" },
+  { key: "following", label: "关注的人" },
+] as const
+
+type CommunityTab = (typeof communityTabs)[number]["key"]
+
+function CommunityNav() {
+  const navigate = useNavigate()
+  const routerLocation = useRouterState({ select: (s) => s.location })
+  const activeTab = (new URLSearchParams(routerLocation.search).get('tab')) ?? 'feed'
+
+  const setTab = (tab: CommunityTab) => {
+    navigate({
+      to: routerLocation.pathname,
+      search: (prev) => {
+        const next = { ...prev }
+        if (tab === "feed") {
+          delete next.tab
+        } else {
+          next.tab = tab
+        }
+        return next
+      },
+      replace: true,
+    })
+  }
+
   return (
-    <SidebarProvider>
+    <nav className="flex items-center gap-1 ml-2">
+      {communityTabs.map((tab) => (
+        <button
+          key={tab.key}
+          onClick={() => setTab(tab.key)}
+          className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+            activeTab === tab.key
+              ? "bg-muted text-foreground"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+          }`}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </nav>
+  )
+}
+
+function Layout() {
+  const location = useLocation()
+  const isForgePage = location.pathname === "/forge"
+  const isDashboardPage = location.pathname === "/"
+  const isCommunityPage = location.pathname === "/community"
+
+  return (
+    <SidebarProvider className={(isForgePage || isDashboardPage) ? "h-svh overflow-hidden" : ""}>
       <AppSidebar />
-      <SidebarInset>
-        <header className="sticky top-0 z-10 flex h-16 shrink-0 items-center gap-2 border-b px-4">
-          <SidebarTrigger className="-ml-1 text-muted-foreground" />
-        </header>
-        <main className="flex-1 p-6 md:p-8">
-          <div className="mx-auto max-w-7xl">
+      <SidebarInset className={(isForgePage || isDashboardPage) ? "overflow-hidden flex flex-col" : ""}>
+        {!isForgePage && (
+          <header className="sticky top-0 z-10 flex h-16 shrink-0 items-center gap-2 border-b px-4">
+            <SidebarTrigger className="-ml-1 text-muted-foreground" />
+            {isCommunityPage && <CommunityNav />}
+          </header>
+        )}
+        {isForgePage ? (
+          <main className="flex-1 overflow-hidden h-full">
             <Outlet />
-          </div>
-        </main>
-        <Footer />
+          </main>
+        ) : isDashboardPage ? (
+          <main className="flex-1 overflow-hidden min-h-0">
+            <Outlet />
+          </main>
+        ) : (
+          <>
+            <main className="flex-1 p-6 md:p-8">
+              <div className="mx-auto max-w-7xl">
+                <Outlet />
+              </div>
+            </main>
+            <Footer />
+          </>
+        )}
       </SidebarInset>
     </SidebarProvider>
   )
