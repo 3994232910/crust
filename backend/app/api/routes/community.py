@@ -200,6 +200,55 @@ def list_following(
     ]
 
 
+# ─── StarGazing ───────────────────────────────────────────────────────────────
+
+class StargazingUser(SQLModel):
+    id: uuid.UUID
+    full_name: str | None = None
+    email: str
+    forge_count: int = 0
+
+
+class StargazingData(SQLModel):
+    self_user: StargazingUser
+    following: list[StargazingUser]
+
+
+@router.get("/stargazing", response_model=StargazingData)
+def get_stargazing(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+) -> StargazingData:
+    """返回当前用户及其关注列表的星球数据（含 forge 笔记数量）"""
+    from app.models.forge import Forge
+
+    def count_forges(user_id: uuid.UUID) -> int:
+        return session.exec(
+            select(func.count()).select_from(Forge).where(Forge.owner_id == user_id)
+        ).one()
+
+    self_user = StargazingUser(
+        id=current_user.id,
+        full_name=current_user.full_name,
+        email=current_user.email,
+        forge_count=count_forges(current_user.id),
+    )
+
+    follows = crud.get_following_users(session=session, user_id=current_user.id)
+    following = [
+        StargazingUser(
+            id=item["user"].id,
+            full_name=item["user"].full_name,
+            email=item["user"].email,
+            forge_count=count_forges(item["user"].id),
+        )
+        for item in follows
+    ]
+
+    return StargazingData(self_user=self_user, following=following)
+
+
 @router.get("/search", response_model=CommunityPostsWithAuthor)
 async def search_community_posts(
     *,

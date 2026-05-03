@@ -3,254 +3,583 @@
 import {
   MeshDistortMaterial,
   OrbitControls,
-  Sphere,
   Text,
+  Sphere,
 } from "@react-three/drei"
 import { Canvas, useFrame, type ThreeElements } from "@react-three/fiber"
-import { FileText, Folder, X } from "lucide-react"
+import { Plus, Users, X } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
 import * as THREE from "three"
-import { type ForgePublic, ForgeService } from "@/client"
 import { Button } from "@/components/ui/button"
 
-// 全局扩展 JSX 类型，彻底解决 R3F 标签 TS 报错
 declare global {
   namespace JSX {
     interface IntrinsicElements extends Partial<ThreeElements> {}
   }
 }
 
-interface Forge extends Omit<ForgePublic, "content" | "is_folder"> {
-  content?: string
-  is_folder?: boolean
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface StargazingUser {
+  id: string
+  full_name: string | null
+  email: string
+  forge_count: number
 }
+
+interface StargazingData {
+  self_user: StargazingUser
+  following: StargazingUser[]
+}
+
+interface Group {
+  id: string
+  name: string
+  color: string
+}
+
+interface GroupState {
+  groups: Group[]
+  assignments: Record<string, string> // userId -> groupId
+}
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const SELF_COLOR = "#f97316"
+const DEFAULT_COLOR = "#eead72"
+const BG_COLOR = "#05111f"
+const GROUP_COLORS = ["#60a5fa", "#a78bfa", "#34d399", "#f472b6", "#facc15"]
+
+function seededRand(seed: number): number {
+  const x = Math.sin(seed + 1) * 10000
+  return x - Math.floor(x)
+}
+
+function planetSize(forgeCount: number): number {
+  return 0.5 + Math.log(forgeCount + 1) * 0.35
+}
+
+function displayName(user: StargazingUser): string {
+  return user.full_name || user.email.split("@")[0]
+}
+
+// ─── Starfield ────────────────────────────────────────────────────────────────
+
+function Starfield() {
+  const positions = useMemo(() => {
+    const pts = new Float32Array(3000 * 3)
+    for (let i = 0; i < 3000; i++) {
+      pts[i * 3] = (seededRand(i * 3) - 0.5) * 600
+      pts[i * 3 + 1] = (seededRand(i * 3 + 1) - 0.5) * 600
+      pts[i * 3 + 2] = (seededRand(i * 3 + 2) - 0.5) * 600
+    }
+    return pts
+  }, [])
+  return (
+    <points>
+      <bufferGeometry>
+        <bufferAttribute
+          attach="attributes-position"
+          count={3000}
+          array={positions}
+          itemSize={3}
+        />
+      </bufferGeometry>
+      <pointsMaterial size={0.25} color="#8ab4d4" transparent opacity={0.5} />
+    </points>
+  )
+}
+
+// ─── Orbit ring ───────────────────────────────────────────────────────────────
+
+function OrbitRing({
+  cx,
+  cz,
+  radius,
+  color,
+}: { cx: number; cz: number; radius: number; color: string }) {
+  return (
+    <mesh position={[cx, 0, cz]} rotation={[Math.PI / 2, 0, 0]}>
+      <ringGeometry args={[radius - 0.04, radius + 0.04, 96]} />
+      <meshBasicMaterial
+        color={color}
+        transparent
+        opacity={0.18}
+        side={THREE.DoubleSide}
+      />
+    </mesh>
+  )
+}
+
+// ─── Planet ───────────────────────────────────────────────────────────────────
 
 interface PlanetProps {
-  forge: Forge
-  position: [number, number, number]
+  user: StargazingUser
+  isSelf: boolean
+  color: string
+  orbitCx: number
+  orbitCz: number
+  orbitRadius: number
+  orbitSpeed: number
+  orbitAngle0: number
+  yOffset: number
   onClick: () => void
-  isStar?: boolean
+  selected: boolean
 }
 
-function Planet({ forge, position, onClick, isStar = false }: PlanetProps) {
-  const meshRef = useRef<THREE.Mesh>(null)
+function Planet({
+  user,
+  isSelf,
+  color,
+  orbitCx,
+  orbitCz,
+  orbitRadius,
+  orbitSpeed,
+  orbitAngle0,
+  yOffset,
+  onClick,
+  selected,
+}: PlanetProps) {
+  const groupRef = useRef<THREE.Group>(null)
+  const angleRef = useRef(orbitAngle0)
   const [hovered, setHovered] = useState(false)
+  const size = planetSize(user.forge_count)
 
-  // 行星轨道运动
-  useFrame((state) => {
-    if (meshRef.current && !isStar) {
-      const time = state.clock.elapsedTime
-      const speed = 0.5
-      const angle = time * speed
-      const distance = Math.sqrt(position[0] ** 2 + position[2] ** 2)
-
-      meshRef.current.position.x = Math.cos(angle) * distance
-      meshRef.current.position.z = Math.sin(angle) * distance
+  useFrame((_, dt) => {
+    if (!isSelf && groupRef.current) {
+      angleRef.current += orbitSpeed * dt
+      groupRef.current.position.set(
+        orbitCx + Math.cos(angleRef.current) * orbitRadius,
+        yOffset,
+        orbitCz + Math.sin(angleRef.current) * orbitRadius,
+      )
     }
   })
 
+  const initX = isSelf ? 0 : orbitCx + Math.cos(orbitAngle0) * orbitRadius
+  const initZ = isSelf ? 0 : orbitCz + Math.sin(orbitAngle0) * orbitRadius
+
   return (
-    <group>
+    <group ref={groupRef} position={[initX, isSelf ? 0 : yOffset, initZ]}>
+      {isSelf && (
+        <pointLight intensity={3} distance={25} color={SELF_COLOR} />
+      )}
+
       <Sphere
-        ref={meshRef}
-        args={[isStar ? 1.5 : 0.8, 32, 32]}
-        position={position}
+        args={[size, 40, 40]}
         onClick={onClick}
         onPointerOver={() => setHovered(true)}
         onPointerOut={() => setHovered(false)}
       >
         <MeshDistortMaterial
-          color={forge.is_folder ? "#8b5cf6" : "#3b82f6"}
-          distort={0.3}
-          speed={2}
-          roughness={0.2}
-          metalness={0.8}
+          color={selected || hovered ? "#ffffff" : color}
+          distort={0.2}
+          speed={1.2}
+          roughness={0.05}
+          metalness={0.95}
+          emissive={color}
+          emissiveIntensity={isSelf ? 0.5 : hovered ? 0.35 : 0.12}
         />
       </Sphere>
 
-      {/* 行星名称标签 */}
       <Text
-        position={[position[0], position[1] + (isStar ? 2 : 1), position[2]]}
-        fontSize={0.5}
-        color={hovered ? "#fbbf24" : "#94a3b8"}
+        position={[0, size + 0.55, 0]}
+        fontSize={isSelf ? 0.65 : 0.44}
+        color={selected || hovered ? "#ffffff" : "#94a3b8"}
         anchorX="center"
         anchorY="middle"
       >
-        {forge.title}
+        {displayName(user)}
       </Text>
     </group>
   )
 }
+
+// ─── Main view ────────────────────────────────────────────────────────────────
 
 interface StarGazingViewProps {
   onClose: () => void
 }
 
 export default function StarGazingView({ onClose }: StarGazingViewProps) {
-  const [forges, setForges] = useState<Forge[]>([])
-  const [selectedForge, setSelectedForge] = useState<Forge | null>(null)
+  const [data, setData] = useState<StargazingData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [selectedUser, setSelectedUser] = useState<StargazingUser | null>(null)
+  const [showGroupPanel, setShowGroupPanel] = useState(false)
+  const [newGroupName, setNewGroupName] = useState("")
 
-  // 加载所有 forge 数据（修复语法错误）
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        const response = await ForgeService.readForges()
-        setForges(response.data as Forge[])
-      } catch (error) {
-        console.error("Failed to load forges:", error)
-      } finally {
-        setLoading(false)
-      }
+  const [groupState, setGroupState] = useState<GroupState>(() => {
+    try {
+      return JSON.parse(
+        localStorage.getItem("stargazing_groups") ??
+          '{"groups":[],"assignments":{}}',
+      )
+    } catch {
+      return { groups: [], assignments: {} }
     }
-    loadData()
+  })
+
+  useEffect(() => {
+    localStorage.setItem("stargazing_groups", JSON.stringify(groupState))
+  }, [groupState])
+
+  useEffect(() => {
+    const token = localStorage.getItem("access_token")
+    const base = import.meta.env.DEV
+      ? ""
+      : (import.meta.env.VITE_API_URL ?? "")
+    fetch(`${base}/api/v1/community/stargazing`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => {
+        if (!r.ok) throw new Error(`${r.status}`)
+        return r.json()
+      })
+      .then(setData)
+      .catch(console.error)
+      .finally(() => setLoading(false))
   }, [])
 
-  // 计算行星位置 - 文件夹作为恒星，文件作为行星
-  const planetarySystems = useMemo(() => {
-    const folders = forges.filter((f) => f.is_folder)
-    const files = forges.filter((f) => !f.is_folder)
+  const layout = useMemo(() => {
+    if (!data) return null
+    const { self_user, following } = data
 
-    // 为每个文件夹创建一个恒星系统
-    return folders.map((folder, index) => {
-      const angle = (index / folders.length) * Math.PI * 2
-      const distance = 15
+    const ungrouped: StargazingUser[] = []
+    const byGroup: Record<string, StargazingUser[]> = {}
 
-      // 恒星位置
-      const starPosition: [number, number, number] = [
-        Math.cos(angle) * distance,
-        0,
-        Math.sin(angle) * distance,
-      ]
-
-      // 找到属于这个文件夹的文件
-      const planetFiles = files.filter((f) => f.parent_id === folder.id)
-
-      // 计算行星位置
-      const planets = planetFiles.map((file, planetIndex) => {
-        const planetAngle = (planetIndex / planetFiles.length) * Math.PI * 2
-        const orbitRadius = 3 + Math.random() * 2
-
-        return {
-          forge: file,
-          position: [
-            starPosition[0] + Math.cos(planetAngle) * orbitRadius,
-            (Math.random() - 0.5) * 2,
-            starPosition[2] + Math.sin(planetAngle) * orbitRadius,
-          ] as [number, number, number],
-        }
-      })
-
-      return {
-        star: { forge: folder, position: starPosition },
-        planets,
+    for (const u of following) {
+      const gid = groupState.assignments[u.id]
+      if (gid && groupState.groups.find((g) => g.id === gid)) {
+        ;(byGroup[gid] ??= []).push(u)
+      } else {
+        ungrouped.push(u)
       }
-    })
-  }, [forges])
+    }
 
-  const handleForgeClick = (forge: Forge) => {
-    setSelectedForge(forge)
+    const ungroupedPlanets = ungrouped.map((user, i) => ({
+      user,
+      orbitCx: 0,
+      orbitCz: 0,
+      orbitRadius: 9 + (i % 5) * 2,
+      orbitSpeed: 0.03 + seededRand(i * 17) * 0.04,
+      orbitAngle0: (i / Math.max(ungrouped.length, 1)) * Math.PI * 2,
+      yOffset: (seededRand(i * 31) - 0.5) * 1.5,
+      color: DEFAULT_COLOR,
+    }))
+
+    const groupPlanets: typeof ungroupedPlanets = []
+    const groupMeta: {
+      group: Group
+      cx: number
+      cz: number
+      members: StargazingUser[]
+    }[] = []
+
+    const activeGroups = groupState.groups.filter((g) => byGroup[g.id]?.length)
+    activeGroups.forEach((group, gi) => {
+      const members = byGroup[group.id]!
+      const clusterAngle = (gi / activeGroups.length) * Math.PI * 2
+      const clusterDist = 30 + gi * 6
+      const cx = Math.cos(clusterAngle) * clusterDist
+      const cz = Math.sin(clusterAngle) * clusterDist
+      groupMeta.push({ group, cx, cz, members })
+      members.forEach((user, i) => {
+        groupPlanets.push({
+          user,
+          orbitCx: cx,
+          orbitCz: cz,
+          orbitRadius: 3 + (i % 3) * 1.8,
+          orbitSpeed: 0.05 + seededRand(i * 13 + gi * 7) * 0.04,
+          orbitAngle0: (i / Math.max(members.length, 1)) * Math.PI * 2,
+          yOffset: (seededRand(i * 23 + gi * 11) - 0.5) * 1.0,
+          color: group.color,
+        })
+      })
+    })
+
+    return { self_user, ungroupedPlanets, groupPlanets, groupMeta }
+  }, [data, groupState])
+
+  const createGroup = () => {
+    const name = newGroupName.trim()
+    if (!name) return
+    const g: Group = {
+      id: crypto.randomUUID(),
+      name,
+      color: GROUP_COLORS[groupState.groups.length % GROUP_COLORS.length],
+    }
+    setGroupState((s) => ({ ...s, groups: [...s.groups, g] }))
+    setNewGroupName("")
+  }
+
+  const assignGroup = (userId: string, groupId: string | null) => {
+    setGroupState((s) => {
+      const a = { ...s.assignments }
+      if (groupId === null) delete a[userId]
+      else a[userId] = groupId
+      return { ...s, assignments: a }
+    })
+  }
+
+  const deleteGroup = (groupId: string) => {
+    setGroupState((s) => ({
+      groups: s.groups.filter((g) => g.id !== groupId),
+      assignments: Object.fromEntries(
+        Object.entries(s.assignments).filter(([, v]) => v !== groupId),
+      ),
+    }))
   }
 
   return (
-    <div className="fixed inset-0 bg-slate-950 z-50">
+    <div className="fixed inset-0 z-50" style={{ background: BG_COLOR }}>
       {loading ? (
-        <div className="flex items-center justify-center h-full">
-          <div className="text-slate-400">Loading...</div>
+        <div className="flex items-center justify-center h-full text-slate-400">
+          加载中...
         </div>
       ) : (
         <>
-          {/* 顶部工具栏 */}
-          <div className="absolute top-4 left-4 right-4 z-10 flex justify-between items-center">
-            <div className="flex items-center gap-4">
-              <h1 className="text-2xl font-bold text-slate-100">Star Gazing</h1>
-              <span className="text-sm text-slate-400">
-                {forges.length} objects in view
+          {/* Top bar */}
+          <div className="absolute top-4 left-4 right-4 z-10 flex justify-between items-center pointer-events-none">
+            <div className="flex items-center gap-3 pointer-events-auto">
+              <h1
+                className="text-2xl font-bold tracking-wide"
+                style={{ color: "#eead72" }}
+              >
+                Star Gazing
+              </h1>
+              <span className="text-sm text-slate-500">
+                {(data?.following.length ?? 0) + 1} 个星球
               </span>
             </div>
-            <Button variant="ghost" size="icon" onClick={onClose}>
-              <X className="h-6 w-6 text-slate-400" />
-            </Button>
+            <div className="flex gap-2 pointer-events-auto">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowGroupPanel((v) => !v)}
+                className="text-slate-400 hover:text-white"
+              >
+                <Users className="h-4 w-4 mr-1" />
+                分组
+              </Button>
+              <Button variant="ghost" size="icon" onClick={onClose}>
+                <X className="h-5 w-5 text-slate-400" />
+              </Button>
+            </div>
           </div>
 
-          {/* 3D 场景 */}
-          <Canvas camera={{ position: [0, 20, 30], fov: 60 }}>
-            <ambientLight intensity={0.2} />
-            <pointLight position={[10, 10, 10]} intensity={1} />
+          {/* 3D scene */}
+          <Canvas camera={{ position: [0, 28, 38], fov: 55 }}>
+            <color attach="background" args={[BG_COLOR]} />
+            <ambientLight intensity={0.08} />
+            <pointLight position={[0, 40, 0]} intensity={0.4} color="#c0d8ff" />
 
-            {/* 渲染所有恒星系统 */}
-            {planetarySystems.map((system, index) => (
-              <group key={index}>
-                {/* 恒星 */}
+            <Starfield />
+
+            {layout && (
+              <>
                 <Planet
-                  forge={system.star.forge}
-                  position={system.star.position}
-                  onClick={() => handleForgeClick(system.star.forge)}
-                  isStar
+                  user={layout.self_user}
+                  isSelf
+                  color={SELF_COLOR}
+                  orbitCx={0}
+                  orbitCz={0}
+                  orbitRadius={0}
+                  orbitSpeed={0}
+                  orbitAngle0={0}
+                  yOffset={0}
+                  onClick={() => setSelectedUser(layout.self_user)}
+                  selected={selectedUser?.id === layout.self_user.id}
                 />
 
-                {/* 行星 */}
-                {system.planets.map((planet, planetIndex) => (
+                {layout.ungroupedPlanets.map((p) => (
                   <Planet
-                    key={planetIndex}
-                    forge={planet.forge}
-                    position={planet.position}
-                    onClick={() => handleForgeClick(planet.forge)}
+                    key={p.user.id}
+                    {...p}
+                    isSelf={false}
+                    onClick={() => setSelectedUser(p.user)}
+                    selected={selectedUser?.id === p.user.id}
                   />
                 ))}
-              </group>
-            ))}
+
+                {layout.groupMeta.map(({ group, cx, cz, members }) => (
+                  <group key={group.id}>
+                    <OrbitRing
+                      cx={cx}
+                      cz={cz}
+                      radius={5.5 + Math.floor(members.length / 3) * 1.5}
+                      color={group.color}
+                    />
+                    <Text
+                      position={[cx, 8, cz]}
+                      fontSize={0.7}
+                      color={group.color}
+                      anchorX="center"
+                    >
+                      {group.name}
+                    </Text>
+                  </group>
+                ))}
+
+                {layout.groupPlanets.map((p) => (
+                  <Planet
+                    key={p.user.id}
+                    {...p}
+                    isSelf={false}
+                    onClick={() => setSelectedUser(p.user)}
+                    selected={selectedUser?.id === p.user.id}
+                  />
+                ))}
+              </>
+            )}
 
             <OrbitControls
-              enablePan={true}
-              enableZoom={true}
-              enableRotate={true}
-              minDistance={10}
-              maxDistance={100}
+              enablePan
+              enableZoom
+              enableRotate
+              minDistance={5}
+              maxDistance={200}
             />
           </Canvas>
 
-          {/* 详情面板 */}
-          {selectedForge && (
-            <div className="absolute right-4 top-20 bottom-4 w-96 bg-slate-900/90 backdrop-blur-sm rounded-lg border border-slate-800 p-6 overflow-y-auto">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-semibold text-slate-100">
-                  {selectedForge.title}
+          {/* Right panel */}
+          {selectedUser && (
+            <div
+              className="absolute right-4 top-16 rounded-xl border p-5"
+              style={{
+                width: "300px",
+                background: "rgba(8,18,38,0.92)",
+                borderColor: "#1e3a5f",
+                backdropFilter: "blur(10px)",
+              }}
+            >
+              <div className="flex justify-between items-center mb-3">
+                <h2 className="text-base font-semibold text-white truncate pr-2">
+                  {displayName(selectedUser)}
                 </h2>
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={() => setSelectedForge(null)}
+                  onClick={() => setSelectedUser(null)}
                 >
-                  <X className="h-5 w-5" />
+                  <X className="h-4 w-4 text-slate-400" />
                 </Button>
               </div>
 
-              <div className="space-y-4">
-                <div className="flex items-center gap-2 text-sm text-slate-400">
-                  {selectedForge.is_folder ? (
-                    <Folder className="h-4 w-4" />
-                  ) : (
-                    <FileText className="h-4 w-4" />
-                  )}
-                  <span>{selectedForge.is_folder ? "Folder" : "File"}</span>
+              <div className="text-sm space-y-1 text-slate-400 mb-4">
+                <div className="truncate">{selectedUser.email}</div>
+                <div style={{ color: "#eead72" }}>
+                  {selectedUser.forge_count} 篇笔记
                 </div>
+              </div>
 
-                {selectedForge.content && (
-                  <div className="prose prose-invert max-w-none">
-                    <div className="text-slate-300 whitespace-pre-wrap">
-                      {selectedForge.content}
-                    </div>
+              {data && selectedUser.id !== data.self_user.id && (
+                <div>
+                  <div className="text-xs text-slate-500 mb-2">分配到分组</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    <button
+                      onClick={() => assignGroup(selectedUser.id, null)}
+                      className="px-2.5 py-1 text-xs rounded-full"
+                      style={{
+                        background: groupState.assignments[selectedUser.id]
+                          ? "transparent"
+                          : "#1e3a5f",
+                        color: groupState.assignments[selectedUser.id]
+                          ? "#475569"
+                          : "#94a3b8",
+                        border: "1px solid #1e3a5f",
+                      }}
+                    >
+                      未分组
+                    </button>
+                    {groupState.groups.map((g) => {
+                      const active =
+                        groupState.assignments[selectedUser.id] === g.id
+                      return (
+                        <button
+                          key={g.id}
+                          onClick={() => assignGroup(selectedUser.id, g.id)}
+                          className="px-2.5 py-1 text-xs rounded-full"
+                          style={{
+                            background: active ? `${g.color}25` : "transparent",
+                            color: g.color,
+                            border: `1px solid ${g.color}60`,
+                          }}
+                        >
+                          {g.name}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Group panel */}
+          {showGroupPanel && (
+            <div
+              className="absolute left-4 top-16 rounded-xl border p-4"
+              style={{
+                width: "256px",
+                background: "rgba(8,18,38,0.92)",
+                borderColor: "#1e3a5f",
+                backdropFilter: "blur(10px)",
+              }}
+            >
+              <h3 className="text-sm font-semibold text-slate-300 mb-3">
+                分组管理
+              </h3>
+
+              <div className="space-y-2 mb-3 max-h-48 overflow-y-auto">
+                {groupState.groups.length === 0 && (
+                  <div className="text-xs text-slate-600">
+                    点击星球可分配到分组
                   </div>
                 )}
+                {groupState.groups.map((g) => {
+                  const count = Object.values(groupState.assignments).filter(
+                    (v) => v === g.id,
+                  ).length
+                  return (
+                    <div key={g.id} className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div
+                          className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                          style={{ background: g.color }}
+                        />
+                        <span className="text-sm text-slate-300 truncate">
+                          {g.name}
+                        </span>
+                        <span className="text-xs text-slate-600 flex-shrink-0">
+                          ({count})
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => deleteGroup(g.id)}
+                        className="text-xs text-slate-600 hover:text-red-400 ml-2 flex-shrink-0"
+                      >
+                        删除
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
 
-                <div className="text-xs text-slate-500">
-                  <div>ID: {selectedForge.id}</div>
-                  <div>
-                    Updated:{" "}
-                    {new Date(selectedForge.updated_at).toLocaleString()}
-                  </div>
-                </div>
+              <div className="flex gap-1.5">
+                <input
+                  value={newGroupName}
+                  onChange={(e) => setNewGroupName(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && createGroup()}
+                  placeholder="新分组名称"
+                  className="flex-1 text-sm rounded-lg px-2.5 py-1.5 text-slate-300 placeholder-slate-600 outline-none"
+                  style={{
+                    background: "rgba(255,255,255,0.04)",
+                    border: "1px solid #1e3a5f",
+                  }}
+                />
+                <Button size="sm" variant="ghost" onClick={createGroup}>
+                  <Plus className="h-4 w-4 text-slate-400" />
+                </Button>
               </div>
             </div>
           )}
