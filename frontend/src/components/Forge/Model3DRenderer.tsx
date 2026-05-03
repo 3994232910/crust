@@ -184,7 +184,7 @@ function ThumbnailCapture({ modelPath, trigger }: { modelPath: string; trigger: 
   return null
 }
 
-function ModelControls({ lightConfig, manualExposure }: { lightConfig: LightConfig; manualExposure: number }) {
+function ModelControls({ lightConfig: _lightConfig, manualExposure }: { lightConfig: LightConfig; manualExposure: number }) {
   const { gl } = useThree()
 
   useEffect(() => {

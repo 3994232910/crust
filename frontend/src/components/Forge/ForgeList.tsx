@@ -209,7 +209,7 @@ export function ForgeList() {
     const handler = (e: Event) => {
       const { forgeId } = (e as CustomEvent).detail
       setForges((prev) => prev.map((f) => f.id === forgeId ? { ...f, published_to_community: false } : f))
-      setSelectedForge((prev) => prev?.id === forgeId ? { ...prev, published_to_community: false } : prev)
+      setSelectedForge((prev) => prev?.id === forgeId ? ({ ...prev, published_to_community: false } as typeof prev) : prev)
     }
     window.addEventListener('community-post-deleted', handler)
     return () => window.removeEventListener('community-post-deleted', handler)
@@ -731,7 +731,7 @@ export function ForgeList() {
       setForges((prev) =>
         prev.map((f) => f.id === selectedForge.id ? { ...f, published_to_community: true } : f)
       )
-      setSelectedForge((prev) => prev ? { ...prev, published_to_community: true } : prev)
+      setSelectedForge((prev) => prev ? ({ ...prev, published_to_community: true } as typeof prev) : prev)
       toast.showSuccessToast("已发布到 Community")
     } catch (err) {
       toast.showErrorToast(err instanceof Error ? err.message : "发布失败")

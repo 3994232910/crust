@@ -349,6 +349,7 @@ function DetailDialog({ post, onClose, onDelete, onFollowToggle, canDelete, dele
                       {children}
                     </mark>
                   ),
+                  // @ts-expect-error custom HTML element not in react-markdown's type
                   model: ({ src }: any) => {
                     if (!src) return null
                     return (
