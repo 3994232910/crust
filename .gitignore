@@ -22,3 +22,9 @@ node_modules/
 
 # TanStack Router/Query cache
 frontend/.tanstack/
+
+# JVM crash logs
+hs_err_pid*.log
+
+# Runtime generated thumbnails
+backend/thumbnails/
