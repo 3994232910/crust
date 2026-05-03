@@ -87,7 +87,7 @@ function SignUp() {
           className="flex flex-col gap-6"
         >
           <div className="flex flex-col items-center gap-2 text-center">
-            <h1 className="text-2xl font-bold text-blue-400">Create an account</h1>
+            <h1 className="text-2xl font-bold text-white">Create an account</h1>
           </div>
 
           <div className="grid gap-4">
@@ -96,7 +96,7 @@ function SignUp() {
               name="full_name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Full Name</FormLabel>
+                  <FormLabel className="text-white">Full Name</FormLabel>
                   <FormControl>
                     <Input
                       data-testid="full-name-input"
@@ -115,7 +115,7 @@ function SignUp() {
               name="email"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Email</FormLabel>
+                  <FormLabel className="text-white">Email</FormLabel>
                   <FormControl>
                     <Input
                       data-testid="email-input"
@@ -134,7 +134,7 @@ function SignUp() {
               name="password"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Password</FormLabel>
+                  <FormLabel className="text-white">Password</FormLabel>
                   <FormControl>
                     <PasswordInput
                       data-testid="password-input"
@@ -152,7 +152,7 @@ function SignUp() {
               name="confirm_password"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Confirm Password</FormLabel>
+                  <FormLabel className="text-white">Confirm Password</FormLabel>
                   <FormControl>
                     <PasswordInput
                       data-testid="confirm-password-input"
@@ -174,9 +174,9 @@ function SignUp() {
             </LoadingButton>
           </div>
 
-          <div className="text-center text-sm text-blue-400">
+          <div className="text-center text-sm text-white">
             Already have an account?{" "}
-            <RouterLink to="/login" className="text-blue-400 underline underline-offset-4">
+            <RouterLink to="/login" className="text-white underline underline-offset-4">
               Log in
             </RouterLink>
           </div>
