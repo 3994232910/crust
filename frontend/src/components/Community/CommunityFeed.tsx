@@ -20,6 +20,11 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import useAuth from '@/hooks/useAuth'
 import { GalaxyIcon } from './GalaxyIcon'
+import {
+  fetchStargazingGroups,
+  createStargazingGroup,
+  setStargazingAssignment as setAssignment,
+} from '@/lib/stargazingApi'
 
 // Rehype plugin: convert ==text== to <mark> elements in HAST
 function rehypeMark() {
@@ -268,46 +273,26 @@ interface DetailDialogProps {
   following: boolean
 }
 
-function readStargazingGroups(): { groups: { id: string; name: string; color: string }[]; assignments: Record<string, string> } {
-  try {
-    return JSON.parse(localStorage.getItem('stargazing_groups') ?? '{"groups":[],"assignments":{}}')
-  } catch {
-    return { groups: [], assignments: {} }
-  }
-}
-
-function saveGroupAssignment(userId: string, groupId: string | null) {
-  const state = readStargazingGroups()
-  if (groupId === null) delete state.assignments[userId]
-  else state.assignments[userId] = groupId
-  localStorage.setItem('stargazing_groups', JSON.stringify(state))
-}
-
 function DetailDialog({ post, onClose, onDelete, onFollowToggle, canDelete, deleting, following }: DetailDialogProps) {
   const { user: currentUser } = useAuth()
   const [showGroupPicker, setShowGroupPicker] = useState(false)
   const [pickerGroups, setPickerGroups] = useState<{ id: string; name: string; color: string }[]>([])
   const [newGroupInput, setNewGroupInput] = useState('')
 
-  const openPicker = () => {
-    setPickerGroups(readStargazingGroups().groups)
+  const openPicker = async () => {
+    const gs = await fetchStargazingGroups()
+    setPickerGroups(gs)
     setNewGroupInput('')
     setShowGroupPicker(true)
   }
 
-  const createAndPick = () => {
+  const createAndPick = async () => {
     const name = newGroupInput.trim()
     if (!name) return
     const GROUP_COLORS = ['#60a5fa', '#a78bfa', '#34d399', '#f472b6', '#facc15']
-    const state = readStargazingGroups()
-    const newGroup = {
-      id: crypto.randomUUID(),
-      name,
-      color: GROUP_COLORS[state.groups.length % GROUP_COLORS.length],
-    }
-    state.groups.push(newGroup)
-    localStorage.setItem('stargazing_groups', JSON.stringify(state))
-    handlePickGroup(newGroup.id)
+    const color = GROUP_COLORS[pickerGroups.length % GROUP_COLORS.length]
+    const newGroup = await createStargazingGroup(name, color)
+    await handlePickGroup(newGroup.id)
   }
 
   const handleFollowClick = () => {
@@ -323,7 +308,7 @@ function DetailDialog({ post, onClose, onDelete, onFollowToggle, canDelete, dele
     if (!post) return
     setShowGroupPicker(false)
     await onFollowToggle(post)
-    saveGroupAssignment(post.owner_id, groupId)
+    await setAssignment(post.owner_id, groupId)
   }
 
   // Only show a header image if it's a real image from content (not a model screenshot thumbnail)

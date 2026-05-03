@@ -81,6 +81,23 @@ class UserFollow(SQLModel, table=True):
     )
 
 
+class StargazingGroup(SQLModel, table=True):
+    """用户自定义的 Star Gazing 分组"""
+    __tablename__ = "stargazing_group"
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    owner_id: uuid.UUID = Field(foreign_key="user.id", index=True)
+    name: str = Field(max_length=100)
+    color: str = Field(max_length=20, default="#60a5fa")
+
+
+class StargazingAssignment(SQLModel, table=True):
+    """某用户把某个关注对象归入哪个分组"""
+    __tablename__ = "stargazing_assignment"
+    owner_id: uuid.UUID = Field(foreign_key="user.id", primary_key=True)
+    target_user_id: uuid.UUID = Field(primary_key=True)
+    group_id: uuid.UUID = Field(foreign_key="stargazing_group.id")
+
+
 class PostFavorite(SQLModel, table=True):
     """帖子收藏表"""
     __tablename__ = "postfavorite"

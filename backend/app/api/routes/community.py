@@ -209,9 +209,26 @@ class StargazingUser(SQLModel):
     forge_count: int = 0
 
 
+class StargazingGroupOut(SQLModel):
+    id: uuid.UUID
+    name: str
+    color: str
+
+
+class StargazingGroupCreate(SQLModel):
+    name: str
+    color: str = "#60a5fa"
+
+
+class StargazingAssignmentIn(SQLModel):
+    group_id: uuid.UUID | None = None
+
+
 class StargazingData(SQLModel):
     self_user: StargazingUser
     following: list[StargazingUser]
+    groups: list[StargazingGroupOut]
+    assignments: dict[str, str]   # target_user_id -> group_id (both as str)
 
 
 @router.get("/stargazing", response_model=StargazingData)
@@ -220,8 +237,9 @@ def get_stargazing(
     session: SessionDep,
     current_user: CurrentUser,
 ) -> StargazingData:
-    """返回当前用户及其关注列表的星球数据（含 forge 笔记数量）"""
+    """返回当前用户及其关注列表的星球数据（含 forge 数量、分组信息）"""
     from app.models.forge import Forge
+    from app.models.community import StargazingGroup, StargazingAssignment
 
     def count_forges(user_id: uuid.UUID) -> int:
         return session.exec(
@@ -246,7 +264,110 @@ def get_stargazing(
         for item in follows
     ]
 
-    return StargazingData(self_user=self_user, following=following)
+    groups = session.exec(
+        select(StargazingGroup).where(StargazingGroup.owner_id == current_user.id)
+    ).all()
+
+    assignments_rows = session.exec(
+        select(StargazingAssignment).where(StargazingAssignment.owner_id == current_user.id)
+    ).all()
+    assignments = {str(r.target_user_id): str(r.group_id) for r in assignments_rows}
+
+    return StargazingData(
+        self_user=self_user,
+        following=following,
+        groups=[StargazingGroupOut(id=g.id, name=g.name, color=g.color) for g in groups],
+        assignments=assignments,
+    )
+
+
+@router.get("/stargazing/groups", response_model=list[StargazingGroupOut])
+def list_stargazing_groups(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+) -> list[StargazingGroupOut]:
+    from app.models.community import StargazingGroup
+    groups = session.exec(
+        select(StargazingGroup).where(StargazingGroup.owner_id == current_user.id)
+    ).all()
+    return [StargazingGroupOut(id=g.id, name=g.name, color=g.color) for g in groups]
+
+
+@router.post("/stargazing/groups", response_model=StargazingGroupOut, status_code=201)
+def create_stargazing_group(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    body: StargazingGroupCreate,
+) -> StargazingGroupOut:
+    from app.models.community import StargazingGroup
+    g = StargazingGroup(owner_id=current_user.id, name=body.name, color=body.color)
+    session.add(g)
+    session.commit()
+    session.refresh(g)
+    return StargazingGroupOut(id=g.id, name=g.name, color=g.color)
+
+
+@router.delete("/stargazing/groups/{group_id}", status_code=204)
+def delete_stargazing_group(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    group_id: uuid.UUID,
+) -> None:
+    from app.models.community import StargazingGroup, StargazingAssignment
+    g = session.get(StargazingGroup, group_id)
+    if not g or g.owner_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Group not found")
+    session.exec(
+        select(StargazingAssignment).where(
+            StargazingAssignment.owner_id == current_user.id,
+            StargazingAssignment.group_id == group_id,
+        )
+    )
+    for row in session.exec(
+        select(StargazingAssignment).where(
+            StargazingAssignment.owner_id == current_user.id,
+            StargazingAssignment.group_id == group_id,
+        )
+    ).all():
+        session.delete(row)
+    session.delete(g)
+    session.commit()
+
+
+@router.put("/stargazing/assignments/{target_user_id}", status_code=200)
+def set_stargazing_assignment(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    target_user_id: uuid.UUID,
+    body: StargazingAssignmentIn,
+) -> dict:
+    from app.models.community import StargazingAssignment
+    existing = session.exec(
+        select(StargazingAssignment).where(
+            StargazingAssignment.owner_id == current_user.id,
+            StargazingAssignment.target_user_id == target_user_id,
+        )
+    ).first()
+    if body.group_id is None:
+        if existing:
+            session.delete(existing)
+            session.commit()
+    else:
+        if existing:
+            existing.group_id = body.group_id
+            session.add(existing)
+        else:
+            session.add(StargazingAssignment(
+                owner_id=current_user.id,
+                target_user_id=target_user_id,
+                group_id=body.group_id,
+            ))
+        session.commit()
+    return {"ok": True}
 
 
 @router.get("/search", response_model=CommunityPostsWithAuthor)

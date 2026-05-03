@@ -72,6 +72,8 @@ from app.models.community import (
     CommunityPostsPublic,
     UserFollow,
     PostFavorite,
+    StargazingGroup,
+    StargazingAssignment,
 )
 from app.models.common import (
     Message,

@@ -11,6 +11,12 @@ import { Plus, Users, X } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
 import * as THREE from "three"
 import { Button } from "@/components/ui/button"
+import {
+  type StargazingGroup,
+  createStargazingGroup,
+  deleteStargazingGroup,
+  setStargazingAssignment,
+} from "@/lib/stargazingApi"
 
 declare global {
   namespace JSX {
@@ -30,17 +36,8 @@ interface StargazingUser {
 interface StargazingData {
   self_user: StargazingUser
   following: StargazingUser[]
-}
-
-interface Group {
-  id: string
-  name: string
-  color: string
-}
-
-interface GroupState {
-  groups: Group[]
-  assignments: Record<string, string> // userId -> groupId
+  groups: StargazingGroup[]
+  assignments: Record<string, string>
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -208,21 +205,6 @@ export default function StarGazingView({ onClose }: StarGazingViewProps) {
   const [showGroupPanel, setShowGroupPanel] = useState(false)
   const [newGroupName, setNewGroupName] = useState("")
 
-  const [groupState, setGroupState] = useState<GroupState>(() => {
-    try {
-      return JSON.parse(
-        localStorage.getItem("stargazing_groups") ??
-          '{"groups":[],"assignments":{}}',
-      )
-    } catch {
-      return { groups: [], assignments: {} }
-    }
-  })
-
-  useEffect(() => {
-    localStorage.setItem("stargazing_groups", JSON.stringify(groupState))
-  }, [groupState])
-
   useEffect(() => {
     const token = localStorage.getItem("access_token")
     const base = import.meta.env.DEV
@@ -240,16 +222,20 @@ export default function StarGazingView({ onClose }: StarGazingViewProps) {
       .finally(() => setLoading(false))
   }, [])
 
+  // Derived convenience aliases
+  const groups = data?.groups ?? []
+  const assignments = data?.assignments ?? {}
+
   const layout = useMemo(() => {
     if (!data) return null
-    const { self_user, following } = data
+    const { self_user, following, groups, assignments } = data
 
     const ungrouped: StargazingUser[] = []
     const byGroup: Record<string, StargazingUser[]> = {}
 
     for (const u of following) {
-      const gid = groupState.assignments[u.id]
-      if (gid && groupState.groups.find((g) => g.id === gid)) {
+      const gid = assignments[u.id]
+      if (gid && groups.find((g) => g.id === gid)) {
         ;(byGroup[gid] ??= []).push(u)
       } else {
         ungrouped.push(u)
@@ -269,13 +255,13 @@ export default function StarGazingView({ onClose }: StarGazingViewProps) {
 
     const groupPlanets: typeof ungroupedPlanets = []
     const groupMeta: {
-      group: Group
+      group: StargazingGroup
       cx: number
       cz: number
       members: StargazingUser[]
     }[] = []
 
-    const activeGroups = groupState.groups.filter((g) => byGroup[g.id]?.length)
+    const activeGroups = groups.filter((g) => byGroup[g.id]?.length)
     activeGroups.forEach((group, gi) => {
       const members = byGroup[group.id]!
       const clusterAngle = (gi / activeGroups.length) * Math.PI * 2
@@ -298,36 +284,37 @@ export default function StarGazingView({ onClose }: StarGazingViewProps) {
     })
 
     return { self_user, ungroupedPlanets, groupPlanets, groupMeta }
-  }, [data, groupState])
+  }, [data])
 
-  const createGroup = () => {
+  const createGroup = async () => {
     const name = newGroupName.trim()
     if (!name) return
-    const g: Group = {
-      id: crypto.randomUUID(),
-      name,
-      color: GROUP_COLORS[groupState.groups.length % GROUP_COLORS.length],
-    }
-    setGroupState((s) => ({ ...s, groups: [...s.groups, g] }))
+    const color = GROUP_COLORS[groups.length % GROUP_COLORS.length]
+    const g = await createStargazingGroup(name, color)
+    setData((d) => d ? { ...d, groups: [...d.groups, g] } : d)
     setNewGroupName("")
   }
 
-  const assignGroup = (userId: string, groupId: string | null) => {
-    setGroupState((s) => {
-      const a = { ...s.assignments }
+  const assignGroup = async (userId: string, groupId: string | null) => {
+    await setStargazingAssignment(userId, groupId)
+    setData((d) => {
+      if (!d) return d
+      const a = { ...d.assignments }
       if (groupId === null) delete a[userId]
       else a[userId] = groupId
-      return { ...s, assignments: a }
+      return { ...d, assignments: a }
     })
   }
 
-  const deleteGroup = (groupId: string) => {
-    setGroupState((s) => ({
-      groups: s.groups.filter((g) => g.id !== groupId),
-      assignments: Object.fromEntries(
-        Object.entries(s.assignments).filter(([, v]) => v !== groupId),
-      ),
-    }))
+  const deleteGroup = async (groupId: string) => {
+    await deleteStargazingGroup(groupId)
+    setData((d) => {
+      if (!d) return d
+      const assignments = Object.fromEntries(
+        Object.entries(d.assignments).filter(([, v]) => v !== groupId),
+      )
+      return { ...d, groups: d.groups.filter((g) => g.id !== groupId), assignments }
+    })
   }
 
   return (
@@ -480,10 +467,10 @@ export default function StarGazingView({ onClose }: StarGazingViewProps) {
                       onClick={() => assignGroup(selectedUser.id, null)}
                       className="px-2.5 py-1 text-xs rounded-full"
                       style={{
-                        background: groupState.assignments[selectedUser.id]
+                        background: data?.assignments[selectedUser.id]
                           ? "transparent"
                           : "#1e3a5f",
-                        color: groupState.assignments[selectedUser.id]
+                        color: data?.assignments[selectedUser.id]
                           ? "#475569"
                           : "#94a3b8",
                         border: "1px solid #1e3a5f",
@@ -491,9 +478,9 @@ export default function StarGazingView({ onClose }: StarGazingViewProps) {
                     >
                       未分组
                     </button>
-                    {groupState.groups.map((g) => {
+                    {data?.groups.map((g) => {
                       const active =
-                        groupState.assignments[selectedUser.id] === g.id
+                        data?.assignments[selectedUser.id] === g.id
                       return (
                         <button
                           key={g.id}
@@ -531,13 +518,13 @@ export default function StarGazingView({ onClose }: StarGazingViewProps) {
               </h3>
 
               <div className="space-y-2 mb-3 max-h-48 overflow-y-auto">
-                {groupState.groups.length === 0 && (
+                {data?.groups.length === 0 && (
                   <div className="text-xs text-slate-600">
                     点击星球可分配到分组
                   </div>
                 )}
-                {groupState.groups.map((g) => {
-                  const count = Object.values(groupState.assignments).filter(
+                {data?.groups.map((g) => {
+                  const count = Object.values(data?.assignments).filter(
                     (v) => v === g.id,
                   ).length
                   return (
