@@ -38,6 +38,18 @@ export default defineConfig({
         target: "http://127.0.0.1:8000",
         changeOrigin: true,
       },
+      "/thumbnails": {
+        target: "http://127.0.0.1:8000",
+        changeOrigin: true,
+      },
+      "/avatars": {
+        target: "http://127.0.0.1:8000",
+        changeOrigin: true,
+      },
+      "/forge-images": {
+        target: "http://127.0.0.1:8000",
+        changeOrigin: true,
+      },
     },
   },
 })

@@ -61,7 +61,7 @@ const DEFAULT_LIGHT_CONFIG: LightConfig = {
   environment: 'studio'
 }
 
-function resolveModelPath(path: string): string {
+export function resolveModelPath(path: string): string {
   if (!path || /^(https?:)?\/\//i.test(path) || path.startsWith('blob:') || path.startsWith('data:')) {
     return path
   }
@@ -184,12 +184,16 @@ function ThumbnailCapture({ modelPath, trigger }: { modelPath: string; trigger: 
   return null
 }
 
-function ModelControls({ lightConfig: _lightConfig }: { lightConfig: LightConfig }) {
+function ModelControls({ lightConfig, manualExposure }: { lightConfig: LightConfig; manualExposure: number }) {
   const { gl } = useThree()
 
   useEffect(() => {
     gl.toneMappingExposure = 1.0
   }, [gl])
+
+  useEffect(() => {
+    gl.toneMappingExposure = manualExposure
+  }, [gl, manualExposure])
 
   return null
 }
@@ -329,6 +333,7 @@ function useAILightOptimization(
   onThumbnailCaptured?: (dataURL: string) => void,
 ) {
   const [lightConfig, setLightConfig] = useState<LightConfig>(DEFAULT_LIGHT_CONFIG)
+  const [manualExposure, setManualExposure] = useState(1.0)
   const [isOptimizing, setIsOptimizing] = useState(false)
   const [isOptimizingView, setIsOptimizingView] = useState(false)
   const [screenshot, setScreenshot] = useState<string | null>(null)
@@ -400,39 +405,6 @@ function useAILightOptimization(
     }
   }, [captureScreenshot, hasSavedViewRef])
 
-  const requestAILightAdjustment = async (feedback: string) => {
-    setIsOptimizing(true)
-
-    const currentScreenshot = screenshot || ''
-
-    try {
-      const token = localStorage.getItem('access_token')
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-      if (token) headers['Authorization'] = `Bearer ${token}`
-
-      const response = await fetch('/api/v1/forge/ai-adjust-light-with-screenshot', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          feedback,
-          currentConfig: lightConfig,
-          screenshot: currentScreenshot
-        })
-      })
-
-      if (!response.ok)  throw new Error('AI adjustment failed')
-
-      const data = await response.json()
-      if (data.config) {
-        setLightConfig(prev => ({ ...prev, ...data.config }))
-      }
-    } catch (error) {
-      console.error('AI light adjustment failed:', error)
-    } finally {
-      setIsOptimizing(false)
-    }
-  }
-
   const requestAIViewOptimization = async (screenshotOverride?: string) => {
     const screenshotToUse = screenshotOverride ?? screenshot
     if (!screenshotToUse) return
@@ -467,33 +439,59 @@ function useAILightOptimization(
   requestAIViewOptimizationRef.current = requestAIViewOptimization
 
   const handleRadialMenuAction = async (action: string) => {
-    const actionMap: Record<string, string> = {
-      'brighter': '整体画面太暗了，需要增加亮度',
-      'darker': '画面太亮了，需要降低亮度',
-      'left-light': '左侧区域光照不足，需要左侧补光',
-      'right-light': '右侧区域光照不足，需要右侧补光',
-      'soft-light': '光照太生硬，需要更柔和的光线',
-      'reset': '重置为默认光照配置'
-    }
-
-    if (action === 'reset') {
-      setLightConfig(DEFAULT_LIGHT_CONFIG)
-      return
-    }
-
     if (action === 'best-view') {
       await requestAIViewOptimization()
       return
     }
 
-    const feedback = actionMap[action]
-    if (feedback) {
-      await requestAILightAdjustment(feedback)
+    if (action === 'reset') {
+      setLightConfig(DEFAULT_LIGHT_CONFIG)
+      setManualExposure(1.0)
+      return
+    }
+
+    // 直接更新 state，即时生效，不走 AI
+    switch (action) {
+      case 'brighter':
+        setManualExposure(prev => Math.min(prev + 0.3, 3.0))
+        setLightConfig(prev => ({
+          ...prev,
+          directional: prev.directional.map(l => ({ ...l, intensity: Math.min(l.intensity + 0.4, 3.0) })),
+        }))
+        break
+      case 'darker':
+        setManualExposure(prev => Math.max(prev - 0.2, 0.2))
+        setLightConfig(prev => ({
+          ...prev,
+          directional: prev.directional.map(l => ({ ...l, intensity: Math.max(l.intensity - 0.3, 0.1) })),
+        }))
+        break
+      case 'left-light':
+        setLightConfig(prev => ({
+          ...prev,
+          directional: [...prev.directional, { position: [-8, 6, 4] as [number, number, number], intensity: 1.0, color: '#e8f0ff' }],
+        }))
+        break
+      case 'right-light':
+        setLightConfig(prev => ({
+          ...prev,
+          directional: [...prev.directional, { position: [8, 6, 4] as [number, number, number], intensity: 1.0, color: '#e8f0ff' }],
+        }))
+        break
+      case 'soft-light':
+        setManualExposure(prev => Math.min(prev + 0.1, 3.0))
+        setLightConfig(prev => ({
+          ...prev,
+          hemisphere: { ...prev.hemisphere, intensity: Math.min(prev.hemisphere.intensity + 0.3, 1.5) },
+          directional: prev.directional.map(l => ({ ...l, intensity: Math.max(l.intensity - 0.15, 0.1) })),
+        }))
+        break
     }
   }
 
   return {
     lightConfig,
+    manualExposure,
     isOptimizing,
     isOptimizingView,
     autoOptimizeOnLoad,
@@ -535,6 +533,7 @@ export function Model3DRenderer({ modelPath, onModelClick, initialView }: Model3
 
   const {
     lightConfig,
+    manualExposure,
     isOptimizing,
     isOptimizingView,
     autoOptimizeOnLoad,
@@ -585,7 +584,8 @@ export function Model3DRenderer({ modelPath, onModelClick, initialView }: Model3
   }
 
   return (
-    <div ref={containerRef} className="w-full h-96 border rounded-lg overflow-hidden bg-slate-900 relative">
+    <div ref={containerRef} className="w-full h-96 relative">
+      <div className="absolute inset-0 border rounded-lg overflow-hidden bg-slate-900">
       <Suspense fallback={
         <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
           Loading 3D Model...
@@ -593,7 +593,7 @@ export function Model3DRenderer({ modelPath, onModelClick, initialView }: Model3
       }>
         <Canvas
           camera={{ position: savedView?.position ?? initialView?.position ?? [0, 0, 5] }}
-          frameloop="demand"
+          frameloop="always"
           gl={{ powerPreference: 'default', antialias: true, preserveDrawingBuffer: true }}
           onCreated={({ gl }) => {
             // 在 webglcontextlost 事件层面截断死循环：
@@ -606,7 +606,9 @@ export function Model3DRenderer({ modelPath, onModelClick, initialView }: Model3
         >
           <ambientLight intensity={lightConfig.ambient} />
           <hemisphereLight
-            args={[lightConfig.hemisphere.skyColor, lightConfig.hemisphere.groundColor, lightConfig.hemisphere.intensity]}
+            color={lightConfig.hemisphere.skyColor as any}
+            groundColor={lightConfig.hemisphere.groundColor as any}
+            intensity={lightConfig.hemisphere.intensity}
           />
           {lightConfig.directional.map((light, index) => (
             <directionalLight
@@ -617,7 +619,7 @@ export function Model3DRenderer({ modelPath, onModelClick, initialView }: Model3
             />
           ))}
           {/* Environment HDR removed — CDN unreachable in CN; manual lights cover it */}
-          <ModelControls lightConfig={lightConfig} />
+          <ModelControls lightConfig={lightConfig} manualExposure={manualExposure} />
           <CameraAnimator
             target={cameraTarget}
             orbitRef={orbitRef}
@@ -689,6 +691,7 @@ export function Model3DRenderer({ modelPath, onModelClick, initialView }: Model3
           />
         </Canvas>
       </Suspense>
+      </div>
 
       <RadialMenu
         onSelect={handleRadialMenuAction}

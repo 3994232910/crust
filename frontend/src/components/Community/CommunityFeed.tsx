@@ -1,7 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { useSearch } from '@tanstack/react-router'
+import { useCallback, useEffect, useRef, useState, useMemo } from 'react'
+import { useRouterState } from '@tanstack/react-router'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import rehypeHighlight from 'rehype-highlight'
+import rehypeRaw from 'rehype-raw'
+import { Box } from 'lucide-react'
+import { getModelThumbnailKey, resolveModelPath } from '../Forge/Model3DRenderer'
+import { Model3DViewerFrame } from '../Forge/Model3DViewerFrame'
+import 'highlight.js/styles/github-dark.css'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -14,6 +20,38 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import useAuth from '@/hooks/useAuth'
 import { GalaxyIcon } from './GalaxyIcon'
+
+// Rehype plugin: convert ==text== to <mark> elements in HAST
+function rehypeMark() {
+  return (tree: any) => {
+    function walk(node: any, parent: any, index: number) {
+      if (node.type === 'text' && typeof node.value === 'string' && node.value.includes('==')) {
+        const parts = node.value.split(/(==(?:[^=\n])+==)/)
+        if (parts.length > 1) {
+          const newNodes = parts
+            .filter((p: string) => p !== '')
+            .map((p: string) =>
+              p.startsWith('==') && p.endsWith('==')
+                ? { type: 'element', tagName: 'mark', properties: {}, children: [{ type: 'text', value: p.slice(2, -2) }] }
+                : { type: 'text', value: p }
+            )
+          parent.children.splice(index, 1, ...newNodes)
+          return newNodes.length
+        }
+      }
+      if (node.children) {
+        let i = 0
+        while (i < node.children.length) {
+          const prev = node.children.length
+          walk(node.children[i], node, i)
+          i += 1 + (node.children.length - prev)
+        }
+      }
+      return 1
+    }
+    walk(tree, null, 0)
+  }
+}
 
 interface CommunityPost {
   id: string
@@ -82,7 +120,17 @@ function contentSnippet(content: string | null, len = 200): string {
 
 function extractFirstImage(content: string | null): string | null {
   if (!content) return null
-  const m = content.match(/!\[.*?\]\(([^)]+)\)/)
+  const mdImg = content.match(/!\[.*?\]\(([^)]+)\)/)
+  if (mdImg) return mdImg[1]
+  const htmlImg = content.match(/<img[^>]+src="([^"]+)"/)
+  return htmlImg ? htmlImg[1] : null
+}
+
+function extractFirstModelSrc(content: string | null): string | null {
+  if (!content) return null
+  const m =
+    content.match(/<model\s+src="([^"]+)"/) ??
+    content.match(/data-src="([^"]+)"/)
   return m ? m[1] : null
 }
 
@@ -110,6 +158,13 @@ function PostCard({ post, onClick }: PostCardProps) {
   const imageUrl = post.thumbnail
     ? resolveImageUrl(post.thumbnail)
     : extractFirstImage(post.content)
+  const modelSrc = !imageUrl ? extractFirstModelSrc(post.content) : null
+  const localThumb = useMemo(() => modelSrc
+    ? (localStorage.getItem(getModelThumbnailKey(resolveModelPath(modelSrc)))
+        ?? localStorage.getItem(getModelThumbnailKey(modelSrc)))
+    : null
+  , [modelSrc])
+  const displayImage = imageUrl ?? localThumb
   const snippet = contentSnippet(post.content)
 
   return (
@@ -118,15 +173,21 @@ function PostCard({ post, onClick }: PostCardProps) {
       onClick={onClick}
     >
       <div className="rounded-lg border bg-card text-card-foreground overflow-hidden transition-colors hover:border-border/80 hover:bg-accent/40">
-        {imageUrl && (
+        {displayImage && (
           <div className="w-full overflow-hidden bg-muted">
             <img
-              src={imageUrl}
+              src={displayImage}
               alt=""
               className="w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
               style={{ display: 'block' }}
               onError={(e) => { (e.currentTarget.parentElement as HTMLElement).style.display = 'none' }}
             />
+          </div>
+        )}
+        {!displayImage && modelSrc && (
+          <div className="w-full h-32 bg-slate-800/60 flex flex-col items-center justify-center gap-2 border-b border-border/40">
+            <Box className="h-8 w-8 text-primary/60" />
+            <span className="text-xs text-muted-foreground">3D 模型</span>
           </div>
         )}
 
@@ -209,9 +270,11 @@ interface DetailDialogProps {
 
 function DetailDialog({ post, onClose, onDelete, onFollowToggle, canDelete, deleting, following }: DetailDialogProps) {
   const { user: currentUser } = useAuth()
-  const imageUrl = post?.thumbnail
-    ? resolveImageUrl(post.thumbnail)
-    : extractFirstImage(post?.content ?? null)
+  // Only show a header image if it's a real image from content (not a model screenshot thumbnail)
+  const hasModel = !!extractFirstModelSrc(post?.content ?? null)
+  const imageUrl = hasModel
+    ? extractFirstImage(post?.content ?? null)
+    : (post?.thumbnail ? resolveImageUrl(post.thumbnail) : extractFirstImage(post?.content ?? null))
 
   return (
     <Dialog open={!!post} onOpenChange={(open) => !open && onClose()}>
@@ -227,7 +290,7 @@ function DetailDialog({ post, onClose, onDelete, onFollowToggle, canDelete, dele
           </div>
         )}
 
-        <div className="flex flex-col flex-1 overflow-hidden p-6 pt-5 gap-4">
+        <div className="flex flex-col flex-1 overflow-hidden min-h-0 p-6 pt-5 gap-4">
           <DialogHeader className="shrink-0 gap-1">
             <DialogTitle className="text-xl leading-tight pr-8">
               {post?.title ?? 'Untitled'}
@@ -276,7 +339,45 @@ function DetailDialog({ post, onClose, onDelete, onFollowToggle, canDelete, dele
 
           <div className="overflow-y-auto flex-1 min-h-0">
             <div className="prose prose-sm dark:prose-invert max-w-none">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                rehypePlugins={[rehypeRaw, rehypeMark, rehypeHighlight]}
+                skipHtml={false}
+                components={{
+                  mark: ({ children }) => (
+                    <mark className="bg-yellow-200 dark:bg-yellow-600/50 text-current rounded-sm px-0.5">
+                      {children}
+                    </mark>
+                  ),
+                  model: ({ src }: any) => {
+                    if (!src) return null
+                    return (
+                      <div className="my-4 not-prose">
+                        <div className="border rounded-lg overflow-hidden bg-slate-800/50">
+                          <Model3DViewerFrame modelPath={src} />
+                        </div>
+                      </div>
+                    )
+                  },
+                  div: ({ node: _n, className, children, ...props }: any) => {
+                    if (props['data-src'] && className?.includes('model-container')) {
+                      return (
+                        <div className="my-4 not-prose">
+                          <div className="border rounded-lg overflow-hidden bg-slate-800/50">
+                            <Model3DViewerFrame modelPath={props['data-src']} />
+                          </div>
+                          {children && (
+                            <div className="px-4 py-2 bg-muted/30 border-t text-sm text-muted-foreground">
+                              {children}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    }
+                    return <div className={className} {...props}>{children}</div>
+                  },
+                }}
+              >
                 {post?.content ?? ''}
               </ReactMarkdown>
             </div>
@@ -289,8 +390,8 @@ function DetailDialog({ post, onClose, onDelete, onFollowToggle, canDelete, dele
 
 export function CommunityFeed() {
   const { user: currentUser } = useAuth()
-  const search = useSearch({ from: '/_layout/community' })
-  const activeTab = search.tab ?? 'feed'
+  const location = useRouterState({ select: (s) => s.location })
+  const activeTab = (new URLSearchParams(location.search).get('tab')) ?? 'feed'
 
   const [posts, setPosts] = useState<CommunityPost[]>([])
   const [followingUsers, setFollowingUsers] = useState<FollowingUser[]>([])
@@ -353,6 +454,7 @@ export function CommunityFeed() {
 
   const handleDelete = async (postId: string) => {
     if (!confirm('Delete this post?')) return
+    const sourceForgeId = selected?.source_forge_id
     setDeleting(true)
     try {
       const res = await fetch(`/api/v1/community/${postId}`, {
@@ -362,6 +464,9 @@ export function CommunityFeed() {
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
       setSelected(null)
       fetchData(skipRef.current, activeTab)
+      if (sourceForgeId) {
+        window.dispatchEvent(new CustomEvent('community-post-deleted', { detail: { forgeId: sourceForgeId } }))
+      }
     } catch (e) {
       alert(String(e))
     } finally {

@@ -5,7 +5,38 @@ import rehypeKatex from 'rehype-katex'
 import rehypeHighlight from 'rehype-highlight'
 import rehypeRaw from 'rehype-raw'
 import 'katex/dist/katex.min.css'
-import 'highlight.js/styles/github-dark.css'
+
+// Rehype plugin: convert ==text== to <mark> elements in HAST
+function rehypeMark() {
+  return (tree: any) => {
+    function walk(node: any, parent: any, index: number) {
+      if (node.type === 'text' && typeof node.value === 'string' && node.value.includes('==')) {
+        const parts = node.value.split(/(==(?:[^=\n])+==)/)
+        if (parts.length > 1) {
+          const newNodes = parts
+            .filter((p: string) => p !== '')
+            .map((p: string) =>
+              p.startsWith('==') && p.endsWith('==')
+                ? { type: 'element', tagName: 'mark', properties: {}, children: [{ type: 'text', value: p.slice(2, -2) }] }
+                : { type: 'text', value: p }
+            )
+          parent.children.splice(index, 1, ...newNodes)
+          return newNodes.length
+        }
+      }
+      if (node.children) {
+        let i = 0
+        while (i < node.children.length) {
+          const prev = node.children.length
+          walk(node.children[i], node, i)
+          i += 1 + (node.children.length - prev)
+        }
+      }
+      return 1
+    }
+    walk(tree, null, 0)
+  }
+}
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { Box, Link2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -235,6 +266,11 @@ export function MarkdownEditor({
 
   // 稳定的 components 对象 —— 不依赖 content/forges，避免每次击键都 unmount Model3DRenderer
   const markdownComponents = useMemo(() => ({
+    mark: ({ children }: any) => (
+      <mark className="bg-yellow-200 dark:bg-yellow-600/50 text-current rounded-sm px-0.5">
+        {children}
+      </mark>
+    ),
     span: ({ node: _n, className, children, ...props }: any) => {
       if (className?.includes('wikilink')) {
         const id = props['data-id']
@@ -305,10 +341,34 @@ export function MarkdownEditor({
     h1: ({ children }: any) => (
       <h1
         id={children?.toString().toLowerCase().replace(/\s+/g, '-')}
-        className="text-3xl font-bold mt-6 mb-4"
+        className="text-3xl font-bold mt-8 mb-4 border-b border-border pb-2"
       >
         {children}
       </h1>
+    ),
+    h2: ({ children }: any) => (
+      <h2
+        id={children?.toString().toLowerCase().replace(/\s+/g, '-')}
+        className="text-2xl font-semibold mt-6 mb-3 border-b border-border pb-1"
+      >
+        {children}
+      </h2>
+    ),
+    h3: ({ children }: any) => (
+      <h3
+        id={children?.toString().toLowerCase().replace(/\s+/g, '-')}
+        className="text-xl font-semibold mt-5 mb-2"
+      >
+        {children}
+      </h3>
+    ),
+    h4: ({ children }: any) => (
+      <h4
+        id={children?.toString().toLowerCase().replace(/\s+/g, '-')}
+        className="text-lg font-medium mt-4 mb-2"
+      >
+        {children}
+      </h4>
     ),
     p: ({ children }: any) => {
       const text = children?.toString() || ''
@@ -405,7 +465,7 @@ export function MarkdownEditor({
           }`}>
             <ReactMarkdown
               remarkPlugins={[remarkGfm, remarkMath]}
-              rehypePlugins={[rehypeRaw, rehypeKatex, rehypeHighlight]}
+              rehypePlugins={[rehypeRaw, rehypeKatex, [rehypeHighlight, { detect: true }], rehypeMark]}
               skipHtml={false}
               components={markdownComponents as any}
             >
