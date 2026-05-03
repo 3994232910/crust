@@ -6,3 +6,7 @@ app.egg-info
 htmlcov
 .cache
 .venv
+
+# User-uploaded files (3D models, avatars, etc.)
+/models/
+/uploads/

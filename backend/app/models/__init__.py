@@ -4,7 +4,8 @@ Database models package.
 This package contains all database models organized by domain:
 - user: User authentication and management
 - item: Generic content items
-- forge: Forge notes (Obsidian-like)
+- forge: Forge notes and AI request schemas
+- dashboard: Evolution, tasks, logs, kanban, activity
 - common: Shared utility models
 """
 
@@ -29,11 +30,48 @@ from app.models.item import (
     ItemsPublic,
 )
 from app.models.forge import (
+    AnnotateRequest,
+    CompleteRequest,
     Forge,
     ForgeCreate,
     ForgeUpdate,
     ForgePublic,
     ForgesPublic,
+    ImageTo3DRequest,
+    LightAdjustRequest,
+    LightAdjustWithScreenshotRequest,
+    LightAutoOptimizeRequest,
+    LightConfig,
+    LightOptimizeRequest,
+    ModelInfo,
+    SummarizeRequest,
+)
+from app.models.dashboard import (
+    ActivityData,
+    DashboardData,
+    DashboardLog,
+    DashboardTask,
+    EvolutionLevel,
+    HeatmapEntry,
+    KanbanData,
+    KanbanItem,
+    LogCreate,
+    LogEntry,
+    TaskCreate,
+    TaskPublic,
+    TaskUpdate,
+    UserEvolution,
+    UserEvolutionStats,
+    WeekPlanDay,
+)
+from app.models.community import (
+    CommunityPost,
+    CommunityPostCreate,
+    CommunityPostUpdate,
+    CommunityPostPublic,
+    CommunityPostsPublic,
+    UserFollow,
+    PostFavorite,
 )
 from app.models.common import (
     Message,
@@ -61,12 +99,48 @@ __all__ = [
     "ItemUpdate",
     "ItemPublic",
     "ItemsPublic",
-    # Forge
+    # Forge (ORM + CRUD)
     "Forge",
     "ForgeCreate",
     "ForgeUpdate",
     "ForgePublic",
     "ForgesPublic",
+    # Forge (AI request schemas)
+    "AnnotateRequest",
+    "CompleteRequest",
+    "ImageTo3DRequest",
+    "LightAdjustRequest",
+    "LightAdjustWithScreenshotRequest",
+    "LightAutoOptimizeRequest",
+    "LightConfig",
+    "LightOptimizeRequest",
+    "ModelInfo",
+    "SummarizeRequest",
+    # Dashboard
+    "ActivityData",
+    "DashboardData",
+    "DashboardLog",
+    "DashboardTask",
+    "EvolutionLevel",
+    "HeatmapEntry",
+    "KanbanData",
+    "KanbanItem",
+    "LogCreate",
+    "LogEntry",
+    "TaskCreate",
+    "TaskPublic",
+    "TaskUpdate",
+    "UserEvolution",
+    "UserEvolutionStats",
+    "WeekPlanDay",
+    # Community
+    "CommunityPost",
+    "CommunityPostCreate",
+    "CommunityPostUpdate",
+    "CommunityPostPublic",
+    "CommunityPostsPublic",
+    "UserFollow",
+    "PostFavorite",
     # Common
     "Message",
     "Token",

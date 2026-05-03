@@ -52,6 +52,7 @@ export type ForgeUpdate = {
     title?: (string | null);
     content?: (string | null);
     is_folder?: (boolean | null);
+    parent_id?: (string | null);
 };
 
 export type HTTPValidationError = {
@@ -244,6 +245,12 @@ export type ForgeDeleteForgeData = {
 };
 
 export type ForgeDeleteForgeResponse = (Message);
+
+export type ForgeGetBacklinksData = {
+    id: string;
+};
+
+export type ForgeGetBacklinksResponse = (ForgesPublic);
 
 export type ItemsReadItemsData = {
     limit?: number;
