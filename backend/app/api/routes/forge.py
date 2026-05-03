@@ -1332,6 +1332,8 @@ def parse_light_config(ai_response: str) -> dict:
             parts = ai_response.split("```")
             for part in parts:
                 part = part.strip()
+                if part.startswith("json"):
+                    part = part[4:].strip()
                 if part.startswith("{") and part.endswith("}"):
                     json_str = part
                     break

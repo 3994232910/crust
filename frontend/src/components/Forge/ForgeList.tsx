@@ -205,6 +205,16 @@ export function ForgeList() {
 
   useEffect(() => { loadForges() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { forgeId } = (e as CustomEvent).detail
+      setForges((prev) => prev.map((f) => f.id === forgeId ? { ...f, published_to_community: false } : f))
+      setSelectedForge((prev) => prev?.id === forgeId ? { ...prev, published_to_community: false } : prev)
+    }
+    window.addEventListener('community-post-deleted', handler)
+    return () => window.removeEventListener('community-post-deleted', handler)
+  }, [])
+
   // ─── Backlinks ─────────────────────────────────────────────────────────────
 
   useEffect(() => {

@@ -220,7 +220,12 @@ def update_community_post(
 
 
 def delete_community_post(*, session: Session, db_post: CommunityPost) -> None:
-    """删除帖子"""
+    """删除帖子，并重置关联 Forge 的发布状态"""
+    if db_post.source_forge_id:
+        forge = session.get(Forge, db_post.source_forge_id)
+        if forge:
+            forge.published_to_community = False
+            session.add(forge)
     session.delete(db_post)
     session.commit()
 

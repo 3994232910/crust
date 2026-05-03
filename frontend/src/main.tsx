@@ -11,10 +11,12 @@ import { ApiError, OpenAPI } from "./client"
 import { ThemeProvider } from "./components/theme-provider"
 import { Toaster } from "./components/ui/sonner"
 import "./index.css"
+import "highlight.js/styles/github-dark.css"
 import { routeTree } from "./routeTree.gen"
 
 // 配置 API 基础路径
-OpenAPI.BASE = import.meta.env.VITE_API_URL
+// dev 环境用空 BASE 走 Vite proxy，避免跨域丢 Authorization header
+OpenAPI.BASE = import.meta.env.DEV ? "" : (import.meta.env.VITE_API_URL ?? "")
 OpenAPI.TOKEN = async () => {
   return localStorage.getItem("access_token") || ""
 }

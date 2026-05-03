@@ -1,4 +1,4 @@
-import { createFileRoute, Outlet, redirect, useLocation, useNavigate, useSearch } from "@tanstack/react-router"
+import { createFileRoute, Outlet, redirect, useLocation, useNavigate, useRouterState } from "@tanstack/react-router"
 
 import { Footer } from "@/components/Common/Footer"
 import AppSidebar from "@/components/Sidebar/AppSidebar"
@@ -30,14 +30,13 @@ const communityTabs = [
 type CommunityTab = (typeof communityTabs)[number]["key"]
 
 function CommunityNav() {
-  const location = useLocation()
   const navigate = useNavigate()
-  const search = useSearch({ from: "/_layout/community" })
-  const activeTab = search.tab ?? "feed"
+  const routerLocation = useRouterState({ select: (s) => s.location })
+  const activeTab = (new URLSearchParams(routerLocation.search).get('tab')) ?? 'feed'
 
   const setTab = (tab: CommunityTab) => {
     navigate({
-      to: location.pathname,
+      to: routerLocation.pathname,
       search: (prev) => {
         const next = { ...prev }
         if (tab === "feed") {
