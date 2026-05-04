@@ -222,13 +222,11 @@ export default function StarGazingView({ onClose }: StarGazingViewProps) {
       .finally(() => setLoading(false))
   }, [])
 
-  // Derived convenience aliases
   const groups = data?.groups ?? []
-  const assignments = data?.assignments ?? {}
 
   const layout = useMemo(() => {
     if (!data) return null
-    const { self_user, following, groups, assignments } = data
+    const { self_user, following, groups = [], assignments = {} } = data
 
     const ungrouped: StargazingUser[] = []
     const byGroup: Record<string, StargazingUser[]> = {}

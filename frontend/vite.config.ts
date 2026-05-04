@@ -9,11 +9,13 @@ export default defineConfig({
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
+    dedupe: ["react", "react-dom"],
   },
   define: {
     "process.env": {},
   },
   build: {
+    sourcemap: 'hidden',
     rollupOptions: {
       // 限制并行文件操作数，降低构建峰值内存
       maxParallelFileOps: 5,
